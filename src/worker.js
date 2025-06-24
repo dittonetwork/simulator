@@ -3,9 +3,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 import cronParser from 'cron-parser';
 import { Database } from './db.js';
-import { parseCronConfig } from './parsers/cronParser.js';
+import { parseCronConfig, getNextSimulationTime } from './parsers/cronParser.js';
 import { parseEventTriggerConfig } from './parsers/eventTriggerParser.js';
 import { Workflow } from './validators/metaValidator.js';
+
+if (!workerData || !workerData.workflow) {
+    throw new Error('workerData.workflow is required. Do not run worker.js directly.');
+}
 
 class WorkflowProcessor {
     constructor(workflow) {
@@ -34,30 +38,6 @@ class WorkflowProcessor {
                 return { type: 'invalid', error: e.message, raw: cfg };
             }
         });
-    }
-
-    getNextSimulationTime(simConfigs) {
-        let nextTime = null;
-        for (const cfg of simConfigs) {
-            // Only handle cron configs
-            if (cfg.type === 'cron' || cfg.expression || (cfg.params && cfg.params.expression)) {
-                let cronExpr = cfg.expression || (cfg.params && cfg.params.expression);
-                if (!cronExpr) continue;
-                try {
-                    const now = new Date();
-                    const interval = cronParser.parseExpression(cronExpr, { currentDate: now });
-                    const candidateTime = interval.next().toDate();
-                    if (!nextTime) {
-                        nextTime = candidateTime;
-                    } else {
-                        // Optionally warn about multiple crons
-                    }
-                } catch (e) {
-                    console.error('Invalid cron expression', cronExpr, e);
-                }
-            }
-        }
-        return nextTime;
     }
 
     getIpfsHashShort() {
@@ -121,7 +101,7 @@ class WorkflowProcessor {
         if (this.fullNode) {
             await this.broadcast(simulationResult);
         }
-        const nextTime = this.getNextSimulationTime(meta.simulationConfig);
+        const nextTime = getNextSimulationTime(meta.simulationConfig);
         if (nextTime) {
             console.log(`[Cron] Calculated next_simulation_time for workflow ${this.getIpfsHashShort()}: ${nextTime.toISOString()}`);
             try {
@@ -140,6 +120,9 @@ class WorkflowProcessor {
 
 // Entry point for worker thread
 (async () => {
+    if (!workerData || !workerData.workflow) {
+        throw new Error('workerData.workflow is required. Do not run worker.js directly.');
+    }
     const processor = new WorkflowProcessor(workerData.workflow);
     try {
         await processor.process();

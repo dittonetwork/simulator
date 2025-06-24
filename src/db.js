@@ -43,6 +43,23 @@ export class Database {
         return validWorkflows;
     }
 
+    async getWorkflowsMissingNextSimulationTime(limit = 100) {
+        const rawWorkflows = await this.db.collection('workflows').find({
+            is_cancelled: false,
+            next_simulation_time: { $exists: false }
+        }).limit(limit).toArray();
+        const validWorkflows = [];
+        for (const raw of rawWorkflows) {
+            try {
+                if (!raw.ipfs_hash) throw new Error('Missing ipfs_hash');
+                validWorkflows.push(new Workflow(raw));
+            } catch (e) {
+                logger.warn(`[DB] Skipping invalid workflow (missing next_simulation_time): ${raw.ipfs_hash ? (raw.ipfs_hash.slice(0, 4) + '...' + raw.ipfs_hash.slice(-4)) : ''} - ${e.message}`);
+            }
+        }
+        return validWorkflows;
+    }
+
     async updateWorkflow(ipfsHash, updateFields, session) {
         try {
             const opts = session ? { session } : {};

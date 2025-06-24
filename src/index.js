@@ -2,6 +2,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Worker } from 'worker_threads';
 import { Database } from './db.js';
+import cronParser from 'cron-parser';
+import { parseCronConfig } from './parsers/cronParser.js';
+import { getNextSimulationTime } from './parsers/cronParser.js';
 
 class Simulator {
     constructor() {
@@ -46,6 +49,22 @@ class Simulator {
         await this.db.connect();
         try {
             while (true) {
+                // Backfill: directly update next_simulation_time for missing workflows
+                const missingNextTime = await this.db.getWorkflowsMissingNextSimulationTime(20); // limit to 20 per loop
+                if (missingNextTime.length > 0) {
+                    console.info(`[Simulator] Backfilling ${missingNextTime.length} workflows missing next_simulation_time...`);
+                    for (const workflow of missingNextTime) {
+                        try {
+                            // Use the shared utility, which now handles all validation
+                            const nextTime = getNextSimulationTime(workflow.meta && workflow.meta.simulationConfig);
+                            await this.db.updateWorkflow(workflow.ipfs_hash, { next_simulation_time: nextTime });
+                            console.info(`[Simulator] Set next_simulation_time for workflow ${workflow.ipfs_hash}: ${nextTime.toISOString()}`);
+                        } catch (e) {
+                            console.warn(`[Simulator] Failed to backfill workflow ${workflow.ipfs_hash}: ${e.message}`);
+                        }
+                    }
+                }
+                // Regular processing
                 const workflows = await this.db.getRelevantWorkflows();
                 console.debug(`[Simulator] Gathered ${workflows.length} workflows for processing.`);
                 await this.processWithWorkers(workflows);
