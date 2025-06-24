@@ -55,12 +55,12 @@ class Simulator {
                     console.info(`[Simulator] Backfilling ${missingNextTime.length} workflows missing next_simulation_time...`);
                     for (const workflow of missingNextTime) {
                         try {
-                            // Use the shared utility, which now handles all validation
-                            const nextTime = getNextSimulationTime(workflow.meta && workflow.meta.simulationConfig);
+                            // No need to check triggers here; Workflow validator already did it
+                            const nextTime = getNextSimulationTime(workflow.triggers);
                             await this.db.updateWorkflow(workflow.ipfs_hash, { next_simulation_time: nextTime });
-                            console.info(`[Simulator] Set next_simulation_time for workflow ${workflow.ipfs_hash}: ${nextTime.toISOString()}`);
+                            console.info(`[Simulator] Set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
                         } catch (e) {
-                            console.warn(`[Simulator] Failed to backfill workflow ${workflow.ipfs_hash}: ${e.message}`);
+                            console.warn(`[Simulator] Failed to backfill workflow ${workflow.getIpfsHashShort()}: ${e.message}`);
                         }
                     }
                 }

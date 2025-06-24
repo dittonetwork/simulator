@@ -54,6 +54,7 @@ export class Database {
                 if (!raw.ipfs_hash) throw new Error('Missing ipfs_hash');
                 validWorkflows.push(new Workflow(raw));
             } catch (e) {
+                console.log(e);
                 logger.warn(`[DB] Skipping invalid workflow (missing next_simulation_time): ${raw.ipfs_hash ? (raw.ipfs_hash.slice(0, 4) + '...' + raw.ipfs_hash.slice(-4)) : ''} - ${e.message}`);
             }
         }

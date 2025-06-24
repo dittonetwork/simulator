@@ -1,5 +1,3 @@
-import { ObjectId } from 'mongodb';
-
 export class Workflow {
     constructor(rawWorkflow) {
         if (!rawWorkflow || typeof rawWorkflow !== 'object') {
@@ -14,32 +12,38 @@ export class Workflow {
         // Validate meta
         const meta = this.meta;
         if (!meta || typeof meta !== 'object') {
-            throw new Error('meta must be an object');
+            throw new Error('meta must be an object, wait for the ipfs retrieval and retry');
         }
-        if (!Array.isArray(meta.chainIds) || meta.chainIds.length === 0) {
-            throw new Error('meta.chainIds must be a non-empty array');
+        // Extract chainIds from meta.workflow.jobs
+        if (!(meta.workflow && Array.isArray(meta.workflow.jobs))) {
+            throw new Error('meta.workflow.jobs must be a non-empty array');
         }
-        if (typeof meta.executions !== 'number') {
-            throw new Error('meta.executions must be a number');
+        // Validate owner
+        if (!(typeof meta.workflow.owner === 'string' && meta.workflow.owner)) {
+            throw new Error('meta.workflow.owner is required');
         }
-        if (!Array.isArray(meta.simulationConfig) || meta.simulationConfig.length === 0) {
-            throw new Error('meta.simulationConfig must be a non-empty array');
+        // Validate triggers
+        if (!Array.isArray(meta.workflow.triggers) || meta.workflow.triggers.length === 0) {
+            throw new Error('meta.workflow.triggers must be a non-empty array');
         }
-        if (!meta.account || typeof meta.account.address !== 'string' || !meta.account.address) {
-            throw new Error('meta.account.address is required');
-        }
-        if (!meta.metadata || typeof meta.metadata.text !== 'string' || !meta.metadata.text) {
-            throw new Error('meta.metadata.text is required');
-        }
-        if (!meta.executionConfig || !Array.isArray(meta.executionConfig.actions) || meta.executionConfig.actions.length === 0) {
-            throw new Error('meta.executionConfig.actions must be a non-empty array');
+        // Enforce each trigger has type and params
+        for (const [i, trigger] of meta.workflow.triggers.entries()) {
+            if (typeof trigger.type !== 'string' || !trigger.type) {
+                throw new Error(`Trigger at index ${i} is missing a valid 'type' property`);
+            }
+            if (typeof trigger.params !== 'object' || trigger.params === null) {
+                throw new Error(`Trigger at index ${i} is missing a valid 'params' object`);
+            }
         }
     }
 
-    get chainIds() { return this.meta.chainIds; }
-    get executions() { return this.meta.executions; }
-    get simulationConfig() { return this.meta.simulationConfig; }
-    get account() { return this.meta.account; }
-    get metadata() { return this.meta.metadata; }
-    get executionConfig() { return this.meta.executionConfig; }
+    get owner() { return this.meta.workflow.owner; }
+    get triggers() { return this.meta.workflow.triggers; }
+    get jobs() { return this.meta.workflow.jobs; }
+
+    getIpfsHashShort() {
+        const hash = this.ipfs_hash || '';
+        if (hash.length <= 8) return hash;
+        return `${hash.slice(0, 4)}...${hash.slice(-4)}`;
+    }
 } 
