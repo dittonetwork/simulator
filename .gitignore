@@ -1,7 +1,6 @@
 # Node modules
 node_modules/
 
-
 # Logs
 logs/
 *.log
@@ -11,6 +10,7 @@ yarn-error.log*
 
 # Environment variables
 .env
+.env.local
 
 # OS files
 .DS_Store
@@ -33,3 +33,11 @@ coverage/
 # Ignore local database dumps/backups
 *.dump
 *.bak
+
+# Local SDK dependency (cloned during setup)
+ditto-workflow-sdk/
+
+# New additions from the code block
+*.nyc_output/
+*.tsbuildinfo
+package-lock.json

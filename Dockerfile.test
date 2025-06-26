@@ -2,17 +2,21 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy SDK first and build it
+COPY ditto-workflow-sdk/ ./ditto-workflow-sdk/
+WORKDIR /app/ditto-workflow-sdk
+RUN npm install && npm run build
 
-# Install dependencies (including GitHub dependency)
+# Go back to app root and copy simulator files
+WORKDIR /app
+COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source code
+# Copy simulator source code
 COPY src/ ./src/
 COPY tsconfig.json ./
 
-# Build TypeScript
+# Build simulator TypeScript integration
 RUN npm run build
 
 # Test that the integration works
