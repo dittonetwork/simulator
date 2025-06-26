@@ -193,10 +193,24 @@ class WorkflowProcessor {
         // Calculate next simulation time
         const nextTime = getNextSimulationTime(this.workflow.triggers);
         if (nextTime) {
-            console.log(`[Cron] Calculated next_simulation_time for workflow ${this.workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
+            // If execution was successful, add 1 minute delay for indexer catch-up
+            let adjustedNextTime = nextTime;
+            if (executionResult && executionResult.success && !executionResult.skipped) {
+                adjustedNextTime = new Date(nextTime.getTime() + 60 * 1000); // Add 1 minute
+                console.log(`[Indexer] Workflow executed successfully - adding 1-minute delay for indexer catch-up`);
+                console.log(`[Cron] Original next_simulation_time: ${nextTime.toISOString()}`);
+                console.log(`[Cron] Adjusted next_simulation_time: ${adjustedNextTime.toISOString()}`);
+                console.log(`[Indexer] This prevents double execution while blockchain state is being indexed`);
+            } else {
+                const reason = !executionResult ? 'no execution' :
+                    executionResult.skipped ? 'execution skipped' : 'execution failed';
+                console.log(`[Cron] No indexer delay needed (${reason}) - using normal schedule`);
+                console.log(`[Cron] Next_simulation_time for workflow ${this.workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
+            }
+
             try {
                 await this.db.withTransaction(async (session) => {
-                    await this.db.updateWorkflow(this.workflow.ipfs_hash, { next_simulation_time: nextTime }, session);
+                    await this.db.updateWorkflow(this.workflow.ipfs_hash, { next_simulation_time: adjustedNextTime }, session);
                 });
                 console.log(`[DB] Transaction committed for workflow ${this.workflow.getIpfsHashShort()}`);
             } catch (e) {
