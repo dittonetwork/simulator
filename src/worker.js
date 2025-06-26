@@ -152,14 +152,6 @@ class WorkflowProcessor {
         return true;
     }
 
-    async broadcast(simulationResult, executionResult = null) {
-        console.log(`[Step] Broadcasting for workflow ${this.workflow.getIpfsHashShort()}`);
-        console.log(`  Simulation result: ${JSON.stringify(simulationResult, null, 2)}`);
-        if (executionResult) {
-            console.log(`  Execution result: ${JSON.stringify(executionResult, null, 2)}`);
-        }
-        return true;
-    }
 
     async process() {
         await this.db.connect();
@@ -197,10 +189,6 @@ class WorkflowProcessor {
         }
 
         await this.report(simulationResult, executionResult);
-
-        if (this.fullNode) {
-            await this.broadcast(simulationResult, executionResult);
-        }
 
         // Calculate next simulation time
         const nextTime = getNextSimulationTime(this.workflow.triggers);
