@@ -8,13 +8,6 @@ export class WorkflowSDKService {
     constructor(config = null) {
         this.config = config || getDefaultConfig();
         this.sdk = createWorkflowSDK(this.config);
-
-        console.log('[WorkflowSDKService] Initialized with config:');
-        console.log(`  - Chain ID: ${this.config.chainId}`);
-        console.log(`  - RPC URL: ${this.config.rpcUrl}`);
-        console.log(`  - IPFS Service: ${this.config.ipfsServiceUrl}`);
-        console.log(`  - Contract: ${this.config.workflowContractAddress}`);
-        console.log(`  - Executor: ${this.config.executorPrivateKey.substring(0, 10)}...`);
     }
 
     /**
@@ -22,12 +15,10 @@ export class WorkflowSDKService {
      */
     async loadWorkflowData(ipfsHash) {
         try {
-            console.log(`[WorkflowSDKService] Loading workflow data for: ${this.getShortHash(ipfsHash)}`);
             const workflowData = await this.sdk.loadWorkflowFromIpfs(ipfsHash);
-            console.log(`[WorkflowSDKService] Successfully loaded workflow data`);
             return workflowData;
         } catch (error) {
-            console.error(`[WorkflowSDKService] Failed to load workflow data:`, error);
+            console.error(`[WorkflowSDKService] Failed to load workflow data:`, error.message);
             throw error;
         }
     }
@@ -37,12 +28,20 @@ export class WorkflowSDKService {
      */
     async simulateWorkflow(workflowData, ipfsHash) {
         try {
-            console.log(`[WorkflowSDKService] Simulating workflow: ${this.getShortHash(ipfsHash)}`);
             const result = await this.sdk.simulateWorkflow(workflowData, ipfsHash);
-            console.log(`[WorkflowSDKService] Simulation result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+
+            // Extract error from session results if simulation failed
+            if (!result.success && result.results && result.results.length > 0) {
+                const firstError = result.results.find(r => r.error);
+                if (firstError && firstError.error) {
+                    result.error = firstError.error;
+                }
+            }
+
+            console.log(`[WorkflowSDKService] Simulation: ${result.success ? 'SUCCESS' : 'FAILED'}`);
             return result;
         } catch (error) {
-            console.error(`[WorkflowSDKService] Simulation failed:`, error);
+            console.error(`[WorkflowSDKService] Simulation failed:`, error.message);
             throw error;
         }
     }
@@ -52,12 +51,20 @@ export class WorkflowSDKService {
      */
     async executeWorkflow(workflowData, ipfsHash) {
         try {
-            console.log(`[WorkflowSDKService] Executing workflow: ${this.getShortHash(ipfsHash)}`);
             const result = await this.sdk.executeWorkflow(workflowData, ipfsHash);
-            console.log(`[WorkflowSDKService] Execution result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+
+            // Extract error from session results if execution failed
+            if (!result.success && result.results && result.results.length > 0) {
+                const firstError = result.results.find(r => r.error);
+                if (firstError && firstError.error) {
+                    result.error = firstError.error;
+                }
+            }
+
+            console.log(`[WorkflowSDKService] Execution: ${result.success ? 'SUCCESS' : 'FAILED'}`);
             return result;
         } catch (error) {
-            console.error(`[WorkflowSDKService] Execution failed:`, error);
+            console.error(`[WorkflowSDKService] Execution failed:`, error.message);
             throw error;
         }
     }
@@ -100,7 +107,6 @@ export class WorkflowSDKService {
             throw new Error(`Missing required configuration: ${missing.join(', ')}`);
         }
 
-        console.log('[WorkflowSDKService] Configuration validation passed');
         return true;
     }
 }
@@ -124,4 +130,4 @@ export function getWorkflowSDKService(customConfig = null) {
         globalInstance = createWorkflowSDKService(customConfig);
     }
     return globalInstance;
-} 
+}

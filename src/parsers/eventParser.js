@@ -5,6 +5,8 @@ export function parseEventConfig(cfg) {
     return {
         type: 'event',
         signature: cfg.params.signature,
-        filter: cfg.params.filter || {}
+        filter: cfg.params.filter || {},
+        chainId: cfg.params.chainId || 11155111, // Default to Sepolia
+        address: cfg.params.address || cfg.params.filter?.address
     };
 } 

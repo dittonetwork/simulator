@@ -9,6 +9,7 @@ export class Workflow {
         this.runs = rawWorkflow.runs;
         this.is_cancelled = rawWorkflow.is_cancelled;
         this.next_simulation_time = rawWorkflow.next_simulation_time;
+        this.block_tracking = rawWorkflow.block_tracking;
         // Validate meta
         const meta = this.meta;
         if (!meta || typeof meta !== 'object') {
