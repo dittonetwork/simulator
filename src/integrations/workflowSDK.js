@@ -35,14 +35,34 @@ export class WorkflowSDKService {
                 const firstError = result.results.find(r => r.error);
                 if (firstError && firstError.error) {
                     result.error = firstError.error;
+                    console.log(`[WorkflowSDKService] Extracted error from session result: ${result.error}`);
+                }
+            }
+
+            // Log detailed result for debugging
+            if (!result.success) {
+                console.log(`[WorkflowSDKService] Simulation failed. Error: ${result.error || 'No error message'}`);
+                if (result.results) {
+                    console.log(`[WorkflowSDKService] Session results:`, result.results.map(r => ({
+                        success: r.success,
+                        error: r.error || 'No error',
+                        hash: r.hash || 'No hash'
+                    })));
                 }
             }
 
             console.log(`[WorkflowSDKService] Simulation: ${result.success ? 'SUCCESS' : 'FAILED'}`);
             return result;
         } catch (error) {
-            console.error(`[WorkflowSDKService] Simulation failed:`, error.message);
-            throw error;
+            console.error(`[WorkflowSDKService] Simulation exception:`, error.message);
+            console.error(`[WorkflowSDKService] Full error:`, error);
+
+            // Return a structured error result instead of throwing
+            return {
+                success: false,
+                error: error.message || error.toString(),
+                results: []
+            };
         }
     }
 
@@ -58,14 +78,34 @@ export class WorkflowSDKService {
                 const firstError = result.results.find(r => r.error);
                 if (firstError && firstError.error) {
                     result.error = firstError.error;
+                    console.log(`[WorkflowSDKService] Extracted error from execution result: ${result.error}`);
+                }
+            }
+
+            // Log detailed result for debugging
+            if (!result.success) {
+                console.log(`[WorkflowSDKService] Execution failed. Error: ${result.error || 'No error message'}`);
+                if (result.results) {
+                    console.log(`[WorkflowSDKService] Execution results:`, result.results.map(r => ({
+                        success: r.success,
+                        error: r.error || 'No error',
+                        hash: r.hash || 'No hash'
+                    })));
                 }
             }
 
             console.log(`[WorkflowSDKService] Execution: ${result.success ? 'SUCCESS' : 'FAILED'}`);
             return result;
         } catch (error) {
-            console.error(`[WorkflowSDKService] Execution failed:`, error.message);
-            throw error;
+            console.error(`[WorkflowSDKService] Execution exception:`, error.message);
+            console.error(`[WorkflowSDKService] Full error:`, error);
+
+            // Return a structured error result instead of throwing
+            return {
+                success: false,
+                error: error.message || error.toString(),
+                results: []
+            };
         }
     }
 

@@ -302,6 +302,12 @@ class WorkflowProcessor {
                 } : null
             };
 
+            // Debug: Log what we're storing
+            this.log(`Storing simulation result - Success: ${lastSimulation.simulation.success}, Error: ${lastSimulation.simulation.error || 'null'}, Cancelled: ${lastSimulation.simulation.cancelled}`);
+            if (lastSimulation.execution) {
+                this.log(`Storing execution result - Success: ${lastSimulation.execution.success}, Error: ${lastSimulation.execution.error || 'null'}, Cancelled: ${lastSimulation.execution.cancelled}`);
+            }
+
             await this.db.withTransaction(async (session) => {
                 await this.db.updateWorkflow(this.workflow.ipfs_hash, { last_simulation: lastSimulation }, session);
             });
