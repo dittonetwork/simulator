@@ -1,0 +1,38 @@
+# Project Structure Guide
+
+This rule provides an at-a-glance map of the simulator code-base so you can quickly locate key functionality.
+
+• **Entry points**
+  • [`src/index.ts`](mdc:src/index.ts) – starts the application, loads configuration, initializes the logger, database, event monitor and worker.
+  • [`src/test-integration.ts`](mdc:src/test-integration.ts) – helper script used for integration testing.
+
+• **Configuration & Constants**
+  • [`src/config.ts`](mdc:src/config.ts) – runtime configuration (env vars, defaults).
+  • [`src/constants.ts`](mdc:src/constants.ts) – project-wide constant values.
+  • [`src/eventTypes.ts`](mdc:src/eventTypes.ts) – enum-like definitions for supported event types.
+
+• **Core Services**
+  • [`src/db.ts`](mdc:src/db.ts) – database connection and helper queries.
+  • [`src/logger.ts`](mdc:src/logger.ts) – centralized logging utility.
+  • [`src/eventMonitor.ts`](mdc:src/eventMonitor.ts) – watches external sources and emits internal events.
+  • [`src/worker.ts`](mdc:src/worker.ts) – background job processor reacting to queued events.
+
+• **Domain Logic**
+  • Parsers
+    • [`src/parsers/cronParser.ts`](mdc:src/parsers/cronParser.ts) – parses cron expressions.
+    • [`src/parsers/eventParser.ts`](mdc:src/parsers/eventParser.ts) – normalizes raw event payloads.
+  • Validators
+    • [`src/validators/metaValidator.ts`](mdc:src/validators/metaValidator.ts) – validates event metadata.
+
+• **Integrations**
+  • [`src/integrations/workflowSDK.ts`](mdc:src/integrations/workflowSDK.ts) – SDK for communicating with an external workflow engine.
+
+• **Shared Utilities & Types**
+  • [`src/utils.ts`](mdc:src/utils.ts) – generic helper functions.
+  • [`src/types.d.ts`](mdc:src/types.d.ts) – global TypeScript type declarations.
+
+Navigate using these links to jump straight to the relevant implementation.
+description:
+globs:
+alwaysApply: false
+---

@@ -1,6 +1,92 @@
-# Ditto Workflow Simulator
+# Simulator
 
-A production-ready workflow simulator that integrates with the Ditto WorkflowSDK for real blockchain execution.
+A TypeScript-based workflow simulation runner that fetches workflow metadata from IPFS, validates triggers, simulates with Kernel SDK, and (optionally) executes on supported chains.
+
+## Features
+
+- Strict‐mode TypeScript throughout (no implicit `any`)
+- Zod-validated runtime configuration via environment variables
+- Modular architecture: `db`, `eventMonitor`, `worker`, `parsers`, and SDK integration
+- Structured logging via Winston
+- ESLint + Prettier code style enforcement
+- GitHub Actions CI: install → lint → compile
+
+## Requirements
+
+| Tool | Version |
+|------|---------|
+| Node | 20.x |
+| npm  | 10.x |
+| MongoDB | >=6.0 (local or remote) |
+| IPFS Gateway | accessible HTTP endpoint |
+
+## Quick Start
+
+```bash
+# clone & install
+git clone <repo>
+cd simulator
+npm ci
+
+# copy and adjust environment variables
+cp env.example .env
+
+# compile
+npm run build
+
+# run the simulator (dev)
+npm run dev
+```
+
+## Environment Variables
+
+See `env.example` for the full list. Key values:
+
+```env
+MONGO_URI=mongodb://localhost:27017
+DB_NAME=indexer
+RPC_URL=https://rpc.ankr.com/eth_sepolia
+FULL_NODE=false
+MAX_WORKERS=4
+RUNNER_NODE_SLEEP=60
+```
+
+All variables are validated at runtime in `src/config.ts`.
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Start simulator using `tsx` (ts-node equivalent) |
+| `npm run build` | Transpile TypeScript → `dist/` |
+| `npm run lint`  | ESLint check (`--max-warnings=0`) |
+| `npm run lint:fix` | Auto-fix ESLint issues |
+| `npm run format` | Prettier write |
+| `npm run test:integration` | Minimal integration smoke test |
+
+## Logging
+
+Logs are emitted to stdout using Winston with timestamp & colorized level. Module-specific child loggers are created via `getLogger('Module')`.
+
+## CI Pipeline
+
+Every push & pull-request triggers the GitHub Actions workflow located at `.github/workflows/ci.yml` which:
+
+1. Checks out the repo
+2. Sets up Node 20 with npm cache
+3. Installs dependencies via `npm ci`
+4. Runs `npm run lint`
+5. Runs `npm run build`
+
+## Contributing
+
+1. Fork & branch from `initial-impl`
+2. Follow Prettier/Lint rules (`npm run lint:fix`)
+3. Submit a PR; CI must pass
+
+## License
+
+MIT © 2025
 
 ## 🚀 Quick Setup
 
@@ -29,7 +115,7 @@ A production-ready workflow simulator that integrates with the Ditto WorkflowSDK
 
 3. **Configure environment:**
    ```bash
-   cp .env.example .env
+   cp env.example .env
    # Edit .env with your configuration
    ```
 
