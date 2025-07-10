@@ -1,0 +1,4 @@
+[submodule "ditto-workflow-sdk"]
+	path = ditto-workflow-sdk
+	url = https://github.com/mukhametgalin/ditto-workflow-sdk
+	branch = zerodev-approach

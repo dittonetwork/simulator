@@ -1,9 +1,9 @@
-import { WorkflowDocument, WorkflowMeta, BlockTracking, Trigger, Job } from '../interfaces.js';
+import { WorkflowDocument, BlockTracking, Trigger } from '../interfaces.js';
 
 export class Workflow implements WorkflowDocument {
   ipfs_hash!: string;
 
-  meta!: WorkflowMeta | null;
+  meta!: WorkflowDocument['meta'] | null;
 
   runs!: number;
 
@@ -18,15 +18,17 @@ export class Workflow implements WorkflowDocument {
   }
 
   get owner() {
-    return this.meta?.workflow?.owner || '';
+    const owner = this.meta?.workflow?.owner as any;
+    if (!owner) return '';
+    return typeof owner === 'string' ? owner : owner.address ?? '';
   }
 
   get triggers(): Trigger[] {
     return this.meta?.workflow?.triggers || [];
   }
 
-  get jobs(): Job[] {
-    return this.meta?.workflow?.jobs || [];
+  get jobs(): any[] {
+    return (this.meta as any)?.workflow?.jobs || [];
   }
 
   getIpfsHashShort() {

@@ -3,7 +3,7 @@ import { Worker } from 'worker_threads';
 import { getLogger } from './logger.js';
 import { Database } from './db.js';
 import { getNextSimulationTime } from './parsers/cronParser.js';
-import EventMonitor from './eventMonitor.js';
+import EventMonitor from './eventMonitor.ts';
 import { CHAIN_IDS, TRIGGER_TYPE } from './constants.js';
 import type { Workflow } from './validators/metaValidator.js';
 
@@ -112,8 +112,7 @@ class Simulator {
     for (const workflow of workflows) {
       for (const trigger of workflow.triggers) {
         if (trigger.type === TRIGGER_TYPE.EVENT) {
-          // Extract from raw trigger format
-          const chainId = (trigger.params as any)?.chainId || CHAIN_IDS.SEPOLIA;
+          const chainId = (trigger as any).chainId || CHAIN_IDS.SEPOLIA;
           chainIds.add(chainId);
         }
       }

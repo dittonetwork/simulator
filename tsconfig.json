@@ -9,19 +9,22 @@
         ],
         "declaration": true,
         "outDir": "./dist",
-        "rootDir": "./src",
+        "rootDirs": ["./src", "./ditto-workflow-sdk/src"],
         "strict": true,
         "noImplicitAny": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "allowSyntheticDefaultImports": true,
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
         "types": [
             "node"
         ]
     },
     "include": [
-        "src/**/*"
+        "src/**/*",
+        "ditto-workflow-sdk/src/**/*"
     ],
     "exclude": [
         "node_modules",

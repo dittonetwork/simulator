@@ -36,8 +36,8 @@ export function getNextSimulationTime(triggers: Trigger[]): Date {
   }
   // Only support new format: meta.workflow.triggers
   const cronConfigs = triggers
-    .filter((cfg) => cfg.type === TRIGGER_TYPE.CRON && (cfg.params as any)?.schedule)
-    .map((cfg) => ({ expression: (cfg.params as any).schedule as string }));
+    .filter((cfg): cfg is { type: 'cron'; schedule: string } => cfg.type === TRIGGER_TYPE.CRON)
+    .map((cfg) => ({ expression: (cfg as any).schedule as string }));
   if (cronConfigs.length === 0) {
     throw new Error('No valid cron trigger found');
   }

@@ -11,7 +11,7 @@ import type {
   WorkflowSDKService,
   SerializedWorkflowData,
 } from './integrations/workflowSDK.js';
-import EventMonitor from './eventMonitor.js';
+import EventMonitor from './eventMonitor.ts';
 import { getLogger } from './logger.js';
 import { TRIGGER_TYPE } from './constants.js';
 
@@ -76,18 +76,18 @@ class WorkflowProcessor {
   }
 
   validateTriggers(triggers: Trigger[]): void {
-    triggers.forEach((trigger, idx) => {
+    triggers.forEach((trigger: Trigger, idx: number) => {
       switch (trigger.type) {
         case TRIGGER_TYPE.CRON: {
-          const params = trigger.params as CronTriggerParams;
-          if (!params.schedule) {
+          const cron = trigger as unknown as CronTriggerParams;
+          if (!('schedule' in cron) || !(cron as any).schedule) {
             this.log(`Warning: Cron trigger at index ${idx} missing schedule`);
           }
           break;
         }
         case TRIGGER_TYPE.EVENT: {
-          const params = trigger.params as EventTriggerParams;
-          if (!params.signature) {
+          const ev = trigger as unknown as EventTriggerParams;
+          if (!('signature' in ev) || !(ev as any).signature) {
             this.log(`Warning: Event trigger at index ${idx} missing signature`);
           }
           break;
@@ -105,7 +105,7 @@ class WorkflowProcessor {
     this.validateTriggers(meta.workflow.triggers as Trigger[]);
 
     // Check event triggers if any exist
-    const eventTriggers = meta.workflow.triggers.filter((trigger) => trigger.type === TRIGGER_TYPE.EVENT);
+    const eventTriggers = meta.workflow.triggers.filter((trigger: Trigger) => trigger.type === TRIGGER_TYPE.EVENT);
     if (eventTriggers.length > 0) {
       this.eventCheckResult = await this.eventMonitor.checkEventTriggers(this.workflow, this.db);
 
@@ -122,7 +122,7 @@ class WorkflowProcessor {
         });
       }
 
-      if (typeof this.eventCheckResult !== 'boolean' && !this.eventCheckResult.hasEvents) {
+      if (typeof this.eventCheckResult !== 'boolean' && !this.eventCheckResult?.hasEvents) {
         this.log(`No events found - workflow skipped`);
         return false; // Stop processing here
       }
@@ -141,7 +141,7 @@ class WorkflowProcessor {
       let simulationResult;
 
       // Check if workflow data is already in meta field (from MongoDB)
-      if (this.workflow.meta && this.workflow.meta.sessions) {
+      if (this.workflow.meta && (this.workflow.meta as any).sessions) {
         simulationResult = await this.workflowSDK.simulateWorkflow(
           this.workflow.meta as unknown as SerializedWorkflowData,
           this.workflow.ipfs_hash,
@@ -212,7 +212,7 @@ class WorkflowProcessor {
       }
 
       // Use stored workflow data from meta
-      if (!this.workflow.meta || !this.workflow.meta.sessions) {
+      if (!this.workflow.meta || !(this.workflow.meta as any).sessions) {
         throw new Error('Workflow data not available in meta field');
       }
 
