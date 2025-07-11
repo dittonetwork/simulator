@@ -1,6 +1,9 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
 import { getConfig } from './config.js';
 import { getLogger } from './logger.js';
+import type { Workflow as BaseWorkflow } from "./types/workflow.js";
+import type { Database } from "./db.js";
+type Workflow = BaseWorkflow & { triggers?: any[] };
 
 const cfg = getConfig();
 const logger = getLogger('EventMonitor');
@@ -9,18 +12,6 @@ type EventConfig = {
   signature: string;
   filter?: Record<string, any>;
   address?: string;
-};
-
-type Workflow = {
-  ipfs_hash: string;
-  meta?: any;
-  triggers?: any[];
-  block_tracking?: Record<string, any>;
-  getIpfsHashShort: () => string;
-};
-
-type Database = {
-  updateWorkflow: (hash: string, update: Record<string, any>) => Promise<void>;
 };
 
 export class EventMonitor {
@@ -96,11 +87,14 @@ export class EventMonitor {
       blockTracking[triggerKey] = {
         signature: eventTrigger.signature,
         chainId: eventTrigger.chainId || Number(Object.keys(cfg.chains)[0]),
-        address: eventTrigger.address || eventTrigger.filter?.address
+        address: eventTrigger.address || eventTrigger.filter?.address,
+        last_processed_block: blockNumber,
+        last_updated: new Date()
       };
+    } else {
+      blockTracking[triggerKey].last_processed_block = blockNumber;
+      blockTracking[triggerKey].last_updated = new Date();
     }
-    blockTracking[triggerKey].last_processed_block = blockNumber;
-    blockTracking[triggerKey].last_updated = new Date();
     await db.updateWorkflow(workflow.ipfs_hash, { block_tracking: blockTracking });
     workflow.block_tracking = blockTracking;
     logger.debug({ trigger: eventTrigger.signature, blockNumber }, 'updated last_processed_block');
@@ -142,7 +136,7 @@ export class EventMonitor {
   }
 
   async checkEventTriggers(workflow: Workflow, db: Database): Promise<{ hasEvents: boolean; results: any[] }> {
-    const triggers = workflow.meta?.workflow?.triggers || workflow.triggers;
+    const triggers = workflow.triggers || [];
     const eventTriggers = triggers.filter((t: any) => t.type === 'event');
     if (eventTriggers.length === 0) return { hasEvents: true, results: [] };
     logger.info({ workflow: workflow.getIpfsHashShort(), triggers: eventTriggers.length }, 'checking event triggers');

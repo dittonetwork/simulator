@@ -23,7 +23,7 @@ async function testIntegration() {
     logger.info('✅ Connections initialized');
 
     // Test IPFS hash from our previous example
-    const testIpfsHash = 'QmeYuoF4EGKc9PinpsHTVaPNTsWKK1rMt9Y7msUZopuAvp';
+    const testIpfsHash = 'QmUW7FQHc5ART25Gmfk66sfDVjadMn2iwtcdGCwCwgKmTM';
 
     // Step 1: Insert test workflow into MongoDB
     logger.info('\n📝 Step 1: Creating test workflow in MongoDB...');
@@ -51,9 +51,9 @@ async function testIntegration() {
     logger.info('\n📥 Step 2: Testing IPFS data loading...');
     const workflowData = await workflowSDK.loadWorkflowData(testIpfsHash);
     logger.info(`✅ Successfully loaded workflow data`);
-    logger.info(`  - Sessions: ${workflowData.sessions.length}`);
-    logger.info(`  - Owner: ${workflowData.workflow.owner}`);
-    logger.info(`  - Jobs: ${workflowData.workflow.jobs.length}`);
+    logger.info(`  - Sessions: ${workflowData.jobs.length}`);
+    logger.info(`  - Owner: ${workflowData.owner}`);
+    logger.info(`  - Jobs: ${workflowData.jobs.length}`);
 
     // Step 3: Test simulation
     logger.info('\n⚡ Step 3: Testing workflow simulation...');
@@ -100,8 +100,8 @@ async function testIntegration() {
     if (testWorkflow) {
       logger.info(`✅ Found our test workflow in results`);
       logger.info(`  - IPFS Hash: ${testWorkflow.ipfs_hash}`);
-      logger.info(`  - Owner: ${testWorkflow.meta?.workflow?.owner || 'Not loaded'}`);
-      logger.info(`  - Sessions: ${testWorkflow.meta?.sessions?.length || 'Not loaded'}`);
+      logger.info(`  - Owner: ${testWorkflow.meta?.owner || 'Not loaded'}`);
+      logger.info(`  - Jobs: ${testWorkflow.meta?.jobs?.length || 'Not loaded'}`);
     }
 
     logger.info('\n🎉 Integration Test Summary:');

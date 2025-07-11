@@ -1,11 +1,11 @@
 import { MongoClient, Db, ClientSession } from 'mongodb';
 import dotenv from 'dotenv';
-import { Workflow } from './validators/metaValidator.js';
+import { Workflow } from './types/workflow.js';
 import logger from './logger.js';
 import { COLLECTIONS } from './constants.js';
 import { getConfig } from './config.js';
 import { serializeIpfs } from './utils.js';
-import { WorkflowDocument } from './interfaces.js';
+import { WorkflowDocument } from './types/interfaces.js';
 
 dotenv.config();
 

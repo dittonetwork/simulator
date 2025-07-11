@@ -3,4 +3,4 @@ export interface EventConfig {
   address?: string;
   filter?: Record<string, unknown>;
   chainId?: number;
-}
+} 
