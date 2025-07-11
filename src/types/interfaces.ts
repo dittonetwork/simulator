@@ -20,4 +20,4 @@ export interface WorkflowDocument {
   block_tracking?: BlockTracking;
   created_at?: Date;
   updated_at?: Date;
-}
+} 

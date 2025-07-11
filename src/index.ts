@@ -5,7 +5,7 @@ import { Database } from './db.js';
 import { getNextSimulationTime } from './parsers/cronParser.js';
 import EventMonitor from './eventMonitor.js';
 import { CHAIN_IDS, TRIGGER_TYPE } from './constants.js';
-import type { Workflow } from './validators/metaValidator.js';
+import type { Workflow } from './types/workflow.js';
 
 dotenv.config();
 const logger = getLogger('Simulator');
