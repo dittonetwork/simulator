@@ -34,9 +34,6 @@ coverage/
 *.dump
 *.bak
 
-# Local SDK dependency (cloned during setup)
-ditto-workflow-sdk/
-
 # New additions from the code block
 *.nyc_output/
 *.tsbuildinfo
