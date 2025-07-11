@@ -51,9 +51,9 @@ async function testIntegration() {
     logger.info('\n📥 Step 2: Testing IPFS data loading...');
     const workflowData = await workflowSDK.loadWorkflowData(testIpfsHash);
     logger.info(`✅ Successfully loaded workflow data`);
-    logger.info(`  - Sessions: ${workflowData.sessions.length}`);
-    logger.info(`  - Owner: ${workflowData.workflow.owner}`);
-    logger.info(`  - Jobs: ${workflowData.workflow.jobs.length}`);
+    logger.info(`  - Sessions: ${workflowData.jobs.length}`);
+    logger.info(`  - Owner: ${workflowData.owner}`);
+    logger.info(`  - Jobs: ${workflowData.jobs.length}`);
 
     // Step 3: Test simulation
     logger.info('\n⚡ Step 3: Testing workflow simulation...');
