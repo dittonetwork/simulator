@@ -114,7 +114,7 @@ export class WorkflowSDKIntegration {
   async executeWorkflow(_workflowData: Workflow, ipfsHash: string): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
-      const executor = new Wallet(this.config.executorPrivateKey, new JsonRpcProvider(this.config.rpcUrl));
+      const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
