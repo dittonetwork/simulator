@@ -2,6 +2,7 @@ import { IpfsStorage, Workflow, WorkflowContract, executeFromIpfs, type Serializ
 import { Wallet, JsonRpcProvider } from 'ethers';
 import { getLogger } from '../logger.js';
 import { deserialize } from '@ditto/workflow-sdk';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const logger = getLogger('WorkflowSDK');
 
@@ -79,7 +80,8 @@ export class WorkflowSDKIntegration {
   async simulateWorkflow(_workflowData: Workflow, ipfsHash: string): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
-      const executor = new Wallet(this.config.executorPrivateKey, new JsonRpcProvider(this.config.rpcUrl));
+      const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
+      logger.info(this.config.rpcUrl);
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
