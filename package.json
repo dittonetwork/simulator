@@ -26,7 +26,8 @@
         "uuid": "^9.0.0",
         "zod": "^3.22.4",
         "tsx": "^4.7.0",
-        "dotenv": "^16.5.0"
+        "dotenv": "^16.5.0",
+        "ethers": "^6.13.0"
     },
     "devDependencies": {
         "@types/node": "^20.17.30",
@@ -51,6 +52,7 @@
         "start": "node dist/index.js",
         "dev": "tsx src/index.ts",
         "test:integration": "tsx src/test-integration.ts",
+        "test:integration:debug": "node --inspect-brk -r tsx/register src/test-integration.ts",
         "test": "vitest run --coverage",
         "lint": "eslint \"./src/**/*.{ts,js}\" --fix",
         "lint:fix": "npm run lint -- --fix",

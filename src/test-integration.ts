@@ -23,7 +23,7 @@ async function testIntegration() {
     logger.info('✅ Connections initialized');
 
     // Test IPFS hash from our previous example
-    const testIpfsHash = 'QmeYuoF4EGKc9PinpsHTVaPNTsWKK1rMt9Y7msUZopuAvp';
+    const testIpfsHash = 'QmUW7FQHc5ART25Gmfk66sfDVjadMn2iwtcdGCwCwgKmTM';
 
     // Step 1: Insert test workflow into MongoDB
     logger.info('\n📝 Step 1: Creating test workflow in MongoDB...');

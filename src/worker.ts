@@ -74,7 +74,7 @@ class WorkflowProcessor {
   }
 
   validateTriggers(triggers: Trigger[]): void {
-    triggers.forEach((trigger, idx) => {
+    triggers.forEach((trigger: Trigger, idx: number) => {
       switch (trigger.type) {
         case TRIGGER_TYPE.CRON: {
           const params = trigger.params as CronTriggerParams;
@@ -103,7 +103,7 @@ class WorkflowProcessor {
     this.validateTriggers(meta.triggers);
 
     // Check event triggers if any exist
-    const eventTriggers = meta.triggers.filter((trigger) => trigger.type === TRIGGER_TYPE.EVENT);
+    const eventTriggers = meta.triggers.filter((trigger: Trigger) => trigger.type === TRIGGER_TYPE.EVENT);
     if (eventTriggers.length > 0) {
       this.eventCheckResult = await this.eventMonitor.checkEventTriggers(this.workflow, this.db);
 
