@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-sleep 30
 for file in /mongo_seed/*.csv; do
   [ -e "$file" ] || continue
   fname="$(basename "$file")"
