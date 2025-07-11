@@ -3,6 +3,9 @@
     "version": "1.0.0",
     "license": "MIT",
     "type": "module",
+    "workspaces": [
+        "ditto-workflow-sdk"
+    ],
     "dependencies": {
         "@zerodev/ecdsa-validator": "^5.4.8",
         "@zerodev/hooks": "^5.3.4",

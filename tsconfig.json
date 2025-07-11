@@ -9,7 +9,7 @@
         ],
         "declaration": true,
         "outDir": "./dist",
-        "rootDir": "./src",
+        "rootDir": ".",
         "strict": true,
         "noImplicitAny": true,
         "esModuleInterop": true,
@@ -18,10 +18,15 @@
         "allowSyntheticDefaultImports": true,
         "types": [
             "node"
-        ]
+        ],
+        "baseUrl": ".",
+        "paths": {
+            "@ditto-workflow-sdk": ["./ditto-workflow-sdk"]
+        }
     },
     "include": [
-        "src/**/*"
+        "src/**/*",
+        "ditto-workflow-sdk/src/**/*"
     ],
     "exclude": [
         "node_modules",

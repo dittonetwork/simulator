@@ -100,8 +100,8 @@ async function testIntegration() {
     if (testWorkflow) {
       logger.info(`✅ Found our test workflow in results`);
       logger.info(`  - IPFS Hash: ${testWorkflow.ipfs_hash}`);
-      logger.info(`  - Owner: ${testWorkflow.meta?.workflow?.owner || 'Not loaded'}`);
-      logger.info(`  - Sessions: ${testWorkflow.meta?.sessions?.length || 'Not loaded'}`);
+      logger.info(`  - Owner: ${testWorkflow.meta?.owner || 'Not loaded'}`);
+      logger.info(`  - Jobs: ${testWorkflow.meta?.jobs?.length || 'Not loaded'}`);
     }
 
     logger.info('\n🎉 Integration Test Summary:');

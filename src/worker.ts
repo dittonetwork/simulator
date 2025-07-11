@@ -5,15 +5,13 @@ import type { Logger } from 'pino';
 import { Database } from './db.js';
 import { getNextSimulationTime } from './parsers/cronParser.js';
 import { Workflow } from './validators/metaValidator.js';
-import type { WorkflowDocument, Trigger, CronTriggerParams, EventTriggerParams } from './interfaces.js';
+import type { WorkflowDocument } from './interfaces.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
-import type {
-  WorkflowSDKService,
-  SerializedWorkflowData,
-} from './integrations/workflowSDK.js';
+import type { WorkflowSDKService } from './integrations/workflowSDK.js';
 import EventMonitor from './eventMonitor.js';
 import { getLogger } from './logger.js';
 import { TRIGGER_TYPE } from './constants.js';
+import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData } from '@ditto/workflow-sdk';
 
 dotenv.config();
 
@@ -102,10 +100,10 @@ class WorkflowProcessor {
     // Validate triggers (no parsing needed)
     const { meta } = this.workflow;
     if (!meta) return false;
-    this.validateTriggers(meta.workflow.triggers as Trigger[]);
+    this.validateTriggers(meta.triggers);
 
     // Check event triggers if any exist
-    const eventTriggers = meta.workflow.triggers.filter((trigger) => trigger.type === TRIGGER_TYPE.EVENT);
+    const eventTriggers = meta.triggers.filter((trigger) => trigger.type === TRIGGER_TYPE.EVENT);
     if (eventTriggers.length > 0) {
       this.eventCheckResult = await this.eventMonitor.checkEventTriggers(this.workflow, this.db);
 
@@ -141,16 +139,16 @@ class WorkflowProcessor {
       let simulationResult;
 
       // Check if workflow data is already in meta field (from MongoDB)
-      if (this.workflow.meta && this.workflow.meta.sessions) {
+      if (this.workflow.meta) {
         simulationResult = await this.workflowSDK.simulateWorkflow(
-          this.workflow.meta as unknown as SerializedWorkflowData,
+          this.workflow.meta,
           this.workflow.ipfs_hash,
         );
       } else {
         // Load from IPFS and simulate
         const workflowData = await this.workflowSDK.loadWorkflowData(this.workflow.ipfs_hash);
         simulationResult = await this.workflowSDK.simulateWorkflow(
-          workflowData as SerializedWorkflowData,
+          workflowData,
           this.workflow.ipfs_hash,
         );
 
@@ -212,12 +210,12 @@ class WorkflowProcessor {
       }
 
       // Use stored workflow data from meta
-      if (!this.workflow.meta || !this.workflow.meta.sessions) {
+      if (!this.workflow.meta) {
         throw new Error('Workflow data not available in meta field');
       }
 
       const executionResult = await this.workflowSDK.executeWorkflow(
-        this.workflow.meta as unknown as SerializedWorkflowData,
+        this.workflow.meta,
         this.workflow.ipfs_hash,
       );
 

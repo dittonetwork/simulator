@@ -1,7 +1,7 @@
 import cronParser from 'cron-parser';
 import { TRIGGER_TYPE } from '../constants.js';
 import { getLogger } from '../logger.js';
-import type { Trigger } from '../interfaces.js';
+import type { Trigger } from '@ditto/workflow-sdk';
 
 const logger = getLogger('CronParser');
 

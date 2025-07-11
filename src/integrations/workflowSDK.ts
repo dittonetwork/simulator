@@ -1,87 +1,9 @@
-import { sepolia, mainnet } from 'viem/chains';
+import { IpfsStorage, Workflow, WorkflowContract, executeFromIpfs, type SerializedWorkflowData } from '@ditto/workflow-sdk';
+import { Wallet, JsonRpcProvider } from 'ethers';
 import { getLogger } from '../logger.js';
+import { deserialize } from '@ditto/workflow-sdk';
 
 const logger = getLogger('WorkflowSDK');
-
-// ---- Minimal internal SDK --------------------------------------------------
-export type ChainId = 11155111 | 1;
-
-export const DEFAULT_CHAIN_CONFIGS = {
-  11155111: { chain: sepolia },
-  1: { chain: mainnet },
-} as const;
-
-export class IpfsStorage {
-  constructor(private base: string) {
-    this.base = base.replace(/\/$/, '');
-  }
-
-  async fetchJSON(hash: string): Promise<any> {
-    const url = `${this.base}/${hash}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to load IPFS hash ${hash}: ${res.status}`);
-    return res.json();
-  }
-}
-
-export class WorkflowContract {
-  constructor(
-    public address: `0x${string}`,
-    public chain: any,
-    public rpcUrl: string,
-  ) {}
-}
-
-export class Workflow {
-  static async loadFromIpfs(ipfsHash: string, storage: IpfsStorage): Promise<any> {
-    return storage.fetchJSON(ipfsHash);
-  }
-
-  static async executeFromData(
-    workflowData: any,
-    _ipfsHash: string,
-    _executorPrivateKey: string,
-    _rpcUrl: string,
-    _contract: WorkflowContract,
-    _simulate: boolean,
-  ): Promise<{ success: boolean; results: Array<{ success: boolean }> }> {
-    const sessions = Array.isArray(workflowData?.sessions) ? workflowData.sessions : [];
-    return {
-      success: true,
-      results: sessions.map(() => ({ success: true })),
-    };
-  }
-}
-// ---------------------------------------------------------------------------
-
-export interface SerializedWorkflowData {
-  workflow: {
-    owner: string;
-    triggers: any[];
-    jobs: Array<{
-      id: string;
-      chainId: number;
-      steps: Array<{
-        target: string;
-        calldata: string;
-        value: string;
-      }>;
-    }>;
-    count?: number;
-    expiresAt?: number;
-  };
-  sessions: Array<{
-    serializedSessionKey: string;
-    executorAddress: string;
-    multicallData: string;
-    chainId: number;
-    totalValue: string;
-  }>;
-  metadata: {
-    createdAt: number;
-    version: string;
-  };
-}
 
 export interface SimulationResult {
   success: boolean;
@@ -130,29 +52,20 @@ export class WorkflowSDKIntegration {
     this.config = config;
     this.storage = new IpfsStorage(config.ipfsServiceUrl);
 
-    const chainConfig = DEFAULT_CHAIN_CONFIGS[config.chainId as keyof typeof DEFAULT_CHAIN_CONFIGS];
-    if (!chainConfig) {
-      throw new Error(`Unsupported chain ID: ${config.chainId}`);
-    }
-
-    this.workflowContract = new WorkflowContract(
-      config.workflowContractAddress as `0x${string}`,
-      chainConfig.chain,
-      config.rpcUrl,
-    );
+    this.workflowContract = new WorkflowContract(config.workflowContractAddress as `0x${string}`);
   }
 
   /**
    * Load workflow data from IPFS hash
    */
-  async loadWorkflowFromIpfs(ipfsHash: string): Promise<SerializedWorkflowData> {
+  async loadWorkflowFromIpfs(ipfsHash: string): Promise<Workflow> {
     logger.info(`Loading workflow data from IPFS: ${ipfsHash}`);
     try {
-      const workflowData = await Workflow.loadFromIpfs(ipfsHash, this.storage);
+      const workflowData = await deserialize(await this.storage.download(ipfsHash));
       logger.info(`Successfully loaded workflow data`);
-      logger.info(`- Sessions: ${workflowData.sessions.length}`);
-      logger.info(`- Owner: ${workflowData.workflow.owner}`);
-      logger.info(`- Jobs: ${workflowData.workflow.jobs.length}`);
+      logger.info(`- Owner: ${workflowData.owner}`);
+      logger.info(`- Jobs: ${workflowData.jobs.length}`);
+
       return workflowData;
     } catch (error) {
       logger.error(`Failed to load workflow from IPFS:`, error);
@@ -163,16 +76,16 @@ export class WorkflowSDKIntegration {
   /**
    * Simulate workflow execution using stored workflow data
    */
-  async simulateWorkflow(workflowData: SerializedWorkflowData, ipfsHash: string): Promise<SimulationResult> {
+  async simulateWorkflow(_workflowData: Workflow, ipfsHash: string): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
-      const result = await Workflow.executeFromData(
-        workflowData,
+      const executor = new Wallet(this.config.executorPrivateKey, new JsonRpcProvider(this.config.rpcUrl));
+      const result = await executeFromIpfs(
         ipfsHash,
-        this.config.executorPrivateKey,
-        this.config.rpcUrl,
-        this.workflowContract,
-        true, // simulate = true
+        this.storage,
+        executor as any,
+        BigInt(0),
+        true,
       );
 
       logger.info(`Simulation completed successfully`);
@@ -186,7 +99,7 @@ export class WorkflowSDKIntegration {
         }
       });
 
-      return result;
+      return result as SimulationResult;
     } catch (error) {
       logger.error(`Simulation failed:`, error);
       throw error;
@@ -196,16 +109,16 @@ export class WorkflowSDKIntegration {
   /**
    * Execute workflow using stored workflow data
    */
-  async executeWorkflow(workflowData: SerializedWorkflowData, ipfsHash: string): Promise<ExecutionResult> {
+  async executeWorkflow(_workflowData: Workflow, ipfsHash: string): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
-      const result = await Workflow.executeFromData(
-        workflowData,
+      const executor = new Wallet(this.config.executorPrivateKey, new JsonRpcProvider(this.config.rpcUrl));
+      const result = await executeFromIpfs(
         ipfsHash,
-        this.config.executorPrivateKey,
-        this.config.rpcUrl,
-        this.workflowContract,
-        false, // simulate = false
+        this.storage,
+        executor as any,
+        BigInt(0),
+        false,
       );
 
       logger.info(`Execution completed successfully`);
@@ -224,7 +137,7 @@ export class WorkflowSDKIntegration {
         logger.info(`- MarkRun called: ${markHash}`);
       }
 
-      return result;
+      return result as ExecutionResult;
     } catch (error) {
       logger.error(`Execution failed:`, error);
       throw error;
@@ -235,7 +148,7 @@ export class WorkflowSDKIntegration {
    * Combined flow: Load from IPFS, simulate, then execute
    */
   async processWorkflow(ipfsHash: string): Promise<{
-    workflowData: SerializedWorkflowData;
+    workflowData: Workflow;
     simulationResult: SimulationResult;
     executionResult?: ExecutionResult;
   }> {
@@ -301,11 +214,11 @@ export class WorkflowSDKService {
     return this.integration.loadWorkflowFromIpfs(ipfsHash);
   }
 
-  simulateWorkflow(data: SerializedWorkflowData, ipfsHash: string) {
+  simulateWorkflow(data: Workflow, ipfsHash: string) {
     return this.integration.simulateWorkflow(data, ipfsHash);
   }
 
-  executeWorkflow(data: SerializedWorkflowData, ipfsHash: string) {
+  executeWorkflow(data: Workflow, ipfsHash: string) {
     return this.integration.executeWorkflow(data, ipfsHash);
   }
 
