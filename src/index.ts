@@ -23,9 +23,12 @@ class Simulator {
 
   private supportedChains!: number[];
 
+  private chainSyncCheckInterval!: number;
+
   constructor() {
     this.sleep = parseInt(process.env.RUNNER_NODE_SLEEP || '60', 10) * 1000;
     this.maxWorkers = parseInt(process.env.MAX_WORKERS || '4', 10);
+    this.chainSyncCheckInterval = parseInt(process.env.CHAIN_SYNC_CHECK_INTERVAL_MS || '5000', 10);
     this.db = new Database();
     this.eventMonitor = new EventMonitor();
     this.blockNumberCache = new Map<number, number>(); // Cache block numbers per chain
@@ -233,6 +236,13 @@ class Simulator {
     await this.db.connect();
     try {
       while (true) {
+        const unsyncedChainsCount = await this.db.getUnsyncedChainsCount();
+        if (unsyncedChainsCount > 0) {
+          logger.info(`${unsyncedChainsCount} chains are not synced. Waiting...`);
+          await new Promise((res) => setTimeout(res, this.chainSyncCheckInterval));
+          continue;
+        }
+
         // 1. Ensure workflows have next_simulation_time
         const missingNextTime = await this.db.getWorkflowsMissingNextSimulationTime(20);
         if (missingNextTime.length > 0) {
