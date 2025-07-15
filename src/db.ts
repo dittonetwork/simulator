@@ -107,6 +107,13 @@ export class Database {
     return validWorkflows;
   }
 
+  async getUnsyncedChainsCount(): Promise<number> {
+    if (!this.db) throw new Error('Database not connected');
+    return this.db.collection(COLLECTIONS.CHAINS).countDocuments({
+      is_synced: false,
+    });
+  }
+
   async updateWorkflow(ipfsHash: string, updateFields: Partial<WorkflowDocument>) {
     if (!this.db) throw new Error('Database not connected');
     const execute = async (sess?: ClientSession) =>

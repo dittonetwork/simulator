@@ -5,6 +5,7 @@ export const CHAIN_IDS = Object.freeze({
 
 export const COLLECTIONS = Object.freeze({
   WORKFLOWS: 'workflows',
+  CHAINS: 'chains',
 });
 
 export const TRIGGER_TYPE = Object.freeze({
