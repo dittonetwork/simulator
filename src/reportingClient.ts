@@ -100,8 +100,14 @@ class ReportingClient {
             const newHeaders = {
                 Authorization: `Bearer ${this.accessToken}`
             };
-            const response = await axios({ method, url, data, headers: newHeaders });
-            return response.data;
+            try {
+                const response = await axios({ method, url, data, headers: newHeaders });
+                return response.data;
+            } catch (retryError: any) {
+                const errorMessage = retryError.response?.data?.message || retryError.message;
+                logger.error(`Request failed after retry: ${errorMessage}`, retryError);
+                throw retryError;
+            }
         }
         throw error;
     }
