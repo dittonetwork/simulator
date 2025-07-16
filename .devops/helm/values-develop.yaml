@@ -115,3 +115,5 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+secretName: simulator-env

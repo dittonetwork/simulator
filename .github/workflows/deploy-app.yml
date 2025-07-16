@@ -64,18 +64,49 @@ jobs:
       run: |
         aws eks update-kubeconfig --name ${{ secrets.CLUSTER_NAME }} --region=${{ vars.AWS_REGION }}
 
-    - name: Deploy services
+    - name: Create Kubernetes Secret from GitHub Secrets list
       env:
-        FILE_ENV: ${{ secrets.ENV_FILE }}
+        SECRET_NAMESPACE: epsilon
+        SECRET_NAME: simulator-env
+        SECRET_KEYS: ENV,GIN_MODE,IPFS_API,IPFS_API_KEY,IPFS_GATEWAY,MONGO_URI,POSTGRES_URI
+        MONGO_URI: ${{ secrets.MONGO_URI }}
+        DB_NAME: ${{ secrets.DB_NAME }}
+        RPC_URL: ${{ secrets.RPC_URL }}
+        DEFAULT_RPC_URL_SEPOLIA: ${{ secrets.DEFAULT_RPC_URL_SEPOLIA }}
+        MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+        MAX_WORKERS: ${{ secrets.MAX_WORKERS }}
+        RUNNER_NODE_SLEEP: ${{ secrets.RUNNER_NODE_SLEEP }}
+        FULL_NODE: ${{ secrets.FULL_NODE }}
+        MAX_MISSING_NEXT_SIM_LIMIT: ${{ secrets.MAX_MISSING_NEXT_SIM_LIMIT }}
+        MAX_BLOCK_RANGE_11155111: ${{ secrets.MAX_BLOCK_RANGE_11155111 }}
+        MAX_BLOCK_RANGE_1: ${{ secrets.MAX_BLOCK_RANGE_1 }}
+        EXECUTOR_PRIVATE_KEY: ${{ secrets.EXECUTOR_PRIVATE_KEY }}
+        CHAIN_ID: ${{ secrets.CHAIN_ID }}
+        IPFS_SERVICE_URL: ${{ secrets.IPFS_SERVICE_URL }}
+        WORKFLOW_CONTRACT_ADDRESS: ${{ secrets.WORKFLOW_CONTRACT_ADDRESS }}
+        LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        LOG_PRETTY: ${{ secrets.LOG_PRETTY }}
+      run: |
+        IFS=',' read -ra KEYS <<< "$SECRET_KEYS"
+        CMD="kubectl create secret generic $SECRET_NAME -n $SECRET_NAMESPACE --dry-run=client -o yaml"
+        for key in "${KEYS[@]}"; do
+          value="${!key}"
+          if [[ -z "$value" ]]; then
+            echo "Warning: Secret $key is empty or not set. Skipping..."
+            continue
+          fi
+          CMD+=" --from-literal=$key=$value"
+        done
+        eval "$CMD" | kubectl apply -f -
+
+    - name: Deploy services
+
       run: |
           version="${{ inputs.version }}"
           version="${{ inputs.version }}"
           ref_name="${{ github.ref_name }}"
           environment=${{ inputs.environment }}
-          echo "${FILE_ENV}" > .env
-          export $(grep -v '^#' .env | xargs)
-          cat .devops/helm/env.yaml | envsubst >compiled.env.yaml
-          helm upgrade --install -n epsilon -f compiled.env.yaml \
+          helm upgrade --install -n epsilon \
             -f .devops/helm/values-$environment.yaml \
             --set image.tag="${ref_name}_${version}" ${{ env.SERVICE_NAME }} \
             .devops/helm/
