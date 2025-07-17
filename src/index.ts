@@ -77,6 +77,8 @@ class Simulator {
 
     for (const workflow of workflows) {
       try {
+        logger.debug(`Processing workflow ${workflow.getIpfsHashShort()} - Owner: ${workflow.owner}, Triggers: ${workflow.triggers.length}, Jobs: ${workflow.jobs.length}`);
+
         const nextTime = getNextSimulationTime(workflow.triggers);
         await this.db.updateWorkflow(workflow.ipfs_hash, { next_simulation_time: nextTime });
         logger.info(`Set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);

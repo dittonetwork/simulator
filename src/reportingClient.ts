@@ -52,16 +52,9 @@ class ReportingClient {
       const message = "\x19Ethereum Signed Message:\n" + nonce;
       const messageHash = ethers.keccak256(ethers.toUtf8Bytes(message));
 
-      logger.debug(`Nonce: ${nonce}`);
-      logger.debug(`Message: ${message}`);
-      logger.debug(`Message hash: ${messageHash}`);
-      logger.debug(`Wallet address: ${this.wallet.address}`);
-
       // Sign the hash directly using the signing key
       const signature = this.wallet.signingKey.sign(messageHash);
       const compactSignature = ethers.Signature.from(signature).serialized;
-
-      logger.debug(`Signature: ${compactSignature}`);
 
       const response = await axios.post(`${this.apiUrl}/operator/register`, {
         walletAddress: this.wallet.address,

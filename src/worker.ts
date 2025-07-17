@@ -298,11 +298,11 @@ class WorkflowProcessor {
         },
         execution: executionResult
           ? {
-              success: executionResult.success,
-              error: executionResult.error || null,
-              cancelled: executionResult.cancelled || false,
-              skipped: executionResult.skipped || false,
-            }
+            success: executionResult.success,
+            error: executionResult.error || null,
+            cancelled: executionResult.cancelled || false,
+            skipped: executionResult.skipped || false,
+          }
           : null,
       };
 
@@ -382,7 +382,7 @@ class WorkflowProcessor {
           }
           const chainId = result.chainId;
           const blockNumber = await this.eventMonitor.getCurrentBlockNumber(chainId);
-    
+
           const report = {
             ipfsHash: this.workflow.ipfs_hash,
             simulationSuccess: simulationResult.success,
@@ -391,7 +391,7 @@ class WorkflowProcessor {
             },
             userOp: bigIntToString(result.userOp),
           };
-    
+
           try {
             await reportingClient.submitReport(report);
           } catch (error) {

@@ -1,5 +1,5 @@
-import { WorkflowDocument, BlockTracking } from './interfaces.js';
-import { Workflow as WorkflowMeta, Job, Trigger } from '@ditto/workflow-sdk';
+import { WorkflowDocument, BlockTracking, WorkflowMeta } from './interfaces.js';
+import { Job, Trigger } from '@ditto/workflow-sdk';
 
 export class Workflow implements WorkflowDocument {
   ipfs_hash!: string;
@@ -19,15 +19,15 @@ export class Workflow implements WorkflowDocument {
   }
 
   get owner() {
-    return this.meta?.owner || '';
+    return this.meta?.workflow?.owner || '';
   }
 
   get triggers(): Trigger[] {
-    return this.meta?.triggers || [];
+    return this.meta?.workflow?.triggers || [];
   }
 
   get jobs(): Job[] {
-    return this.meta?.jobs || [];
+    return this.meta?.workflow?.jobs || [];
   }
 
   getIpfsHashShort() {
