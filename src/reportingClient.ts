@@ -14,7 +14,7 @@ class ReportingClient {
   private wallet: ethers.Wallet;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
-  
+
   constructor() {
     this.apiUrl = process.env.IPFS_SERVICE_URL as string;
     this.privateKey = process.env.EXECUTOR_PRIVATE_KEY as string;
@@ -24,9 +24,9 @@ class ReportingClient {
     }
 
     if (!this.privateKey) {
-        throw new Error('EXECUTOR_PRIVATE_KEY is not defined in environment variables');
+      throw new Error('EXECUTOR_PRIVATE_KEY is not defined in environment variables');
     }
-    
+
     this.wallet = new ethers.Wallet(this.privateKey);
   }
 
@@ -37,100 +37,95 @@ class ReportingClient {
 
   private async getNonce(): Promise<string> {
     const response = await axios.post(`${this.apiUrl}/operator/nonce`, {
-        walletAddress: this.wallet.address,
+      walletAddress: this.wallet.address,
     });
     return response.data.nonce;
   }
 
   private async _register() {
     try {
-        logger.info('Registering operator...');
-        const nonce = await this.getNonce();
-        const signature = await this.wallet.signMessage(nonce);
-        
-        const response = await axios.post(`${this.apiUrl}/operator/register`, {
-            walletAddress: this.wallet.address,
-            signature: signature,
-        });
+      logger.info('Registering operator...');
+      const nonce = await this.getNonce();
 
-        this.accessToken = response.data.accessToken;
-        this.refreshToken = response.data.refreshToken;
-        logger.info('Operator registered successfully.');
+      // Manually construct the message hash to match server expectations
+      // Server expects: message = "\x19Ethereum Signed Message:\n" + nonce (without length)
+      const message = "\x19Ethereum Signed Message:\n" + nonce;
+      const messageHash = ethers.keccak256(ethers.toUtf8Bytes(message));
+
+      logger.debug(`Nonce: ${nonce}`);
+      logger.debug(`Message: ${message}`);
+      logger.debug(`Message hash: ${messageHash}`);
+      logger.debug(`Wallet address: ${this.wallet.address}`);
+
+      // Sign the hash directly using the signing key
+      const signature = this.wallet.signingKey.sign(messageHash);
+      const compactSignature = ethers.Signature.from(signature).serialized;
+
+      logger.debug(`Signature: ${compactSignature}`);
+
+      const response = await axios.post(`${this.apiUrl}/operator/register`, {
+        walletAddress: this.wallet.address,
+        signature: compactSignature,
+      });
+
+      this.accessToken = response.data.accessToken;
+      this.refreshToken = response.data.refreshToken;
+      logger.info('Operator registered successfully.');
     } catch (error) {
-        logger.error('Failed to register operator', error);
-        throw new Error('Could not register operator with the reporting service.');
+      logger.error('Failed to register operator', error);
+      throw new Error('Could not register operator with the reporting service.');
     }
   }
 
   private async _refreshToken() {
     try {
-        logger.info('Refreshing token...');
-        if (!this.refreshToken) {
-            throw new Error('No refresh token available.');
-        }
+      logger.info('Refreshing token...');
+      if (!this.refreshToken) {
+        throw new Error('No refresh token available.');
+      }
 
-        const response = await axios.post(`${this.apiUrl}/operator/refresh-token`, {
-            refreshToken: this.refreshToken,
-        });
+      const response = await axios.post(`${this.apiUrl}/operator/refresh-token`, {
+        refreshToken: this.refreshToken,
+      });
 
-        this.accessToken = response.data.accessToken;
-        this.refreshToken = response.data.refreshToken;
-        logger.info('Token refreshed successfully.');
+      this.accessToken = response.data.accessToken;
+      this.refreshToken = response.data.refreshToken;
+      logger.info('Token refreshed successfully.');
     } catch (error) {
-        logger.error('Failed to refresh token', error);
-        // If refresh fails, try to re-register
-        await this._register();
+      logger.error('Failed to refresh token', error);
+      // If refresh fails, try to re-register
+      await this._register();
     }
   }
 
   private async request(method: 'get' | 'post' | 'put' | 'delete', endpoint: string, data?: any) {
     const url = `${this.apiUrl}${endpoint}`;
-    const maxRetries = 3;
-    let lastError: any;
+    const headers = {
+      Authorization: `Bearer ${this.accessToken}`
+    };
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios({ method, url, data, headers });
+      return response.data;
+    } catch (error: any) {
+      if (error.response && error.response.status === 401) {
+        logger.warn('Request failed with 401. Refreshing token and retrying...');
+        await this._refreshToken();
+        // afrer refresh try again
+        const newHeaders = {
+          Authorization: `Bearer ${this.accessToken}`
+        };
         try {
-            const headers = {
-                Authorization: `Bearer ${this.accessToken}`
-            };
-            const response = await axios({ method, url, data, headers });
-            return response.data;
-        } catch (error: any) {
-            lastError = error;
-
-            if (error.response && error.response.status === 401) {
-                logger.warn(`Request failed with 401 on attempt ${attempt} of ${maxRetries}. Refreshing token...`);
-                if (attempt < maxRetries) {
-                    try {
-                        await this._refreshToken();
-                        continue;
-                    } catch (refreshError) {
-                        logger.error('Failed to refresh token, aborting request.', refreshError);
-                        throw refreshError;
-                    }
-                }
-            }
-            
-            const isNetworkError = !error.response;
-            const isServerError = error.response && error.response.status >= 500;
-
-            if (isNetworkError || isServerError) {
-                if (attempt < maxRetries) {
-                    const delay = Math.pow(2, attempt - 1) * 1000;
-                    logger.warn(`Request failed on attempt ${attempt} of ${maxRetries}. Retrying in ${delay}ms...`, {
-                        errorMessage: error.message,
-                    });
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    continue;
-                }
-            } else if (!(error.response && error.response.status === 401)) {
-                throw error;
-            }
+          const response = await axios({ method, url, data, headers: newHeaders });
+          return response.data;
+        } catch (retryError: any) {
+          const errorMessage = retryError.response?.data?.message || retryError.message;
+          logger.error(`Request failed after retry: ${errorMessage}`, retryError);
+          throw retryError;
         }
+      }
+      throw error;
     }
-
-    logger.error(`Request failed after ${maxRetries} attempts.`);
-    throw lastError;
   }
 
   public async submitReport(report: any) {
