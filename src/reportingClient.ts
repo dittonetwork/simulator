@@ -37,7 +37,7 @@ class ReportingClient {
 
   private async getNonce(): Promise<string> {
     const response = await axios.post(`${this.apiUrl}/operator/nonce`, {
-        publicKey: this.wallet.address,
+        walletAddress: this.wallet.address,
     });
     return response.data.nonce;
   }
@@ -49,7 +49,7 @@ class ReportingClient {
         const signature = await this.wallet.signMessage(nonce);
         
         const response = await axios.post(`${this.apiUrl}/operator/register`, {
-            publicKey: this.wallet.address,
+            walletAddress: this.wallet.address,
             signature: signature,
         });
 
