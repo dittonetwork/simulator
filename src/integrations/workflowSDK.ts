@@ -81,12 +81,13 @@ export class WorkflowSDKIntegration {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
+      const nonce = await this.workflowContract.getNonce(executor.address, this.config.chainId);
       logger.info(this.config.rpcUrl);
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
         executor as any,
-        BigInt(0),
+        nonce + BigInt(1),
         true,
       );
 
@@ -115,11 +116,12 @@ export class WorkflowSDKIntegration {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
+      const nonce = await this.workflowContract.getNonce(executor.address, this.config.chainId);
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
         executor as any,
-        BigInt(0),
+        nonce + BigInt(1),
         false,
       );
 
