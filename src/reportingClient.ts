@@ -14,7 +14,7 @@ class ReportingClient {
   private wallet: ethers.Wallet;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
-  
+
   constructor() {
     this.apiUrl = process.env.IPFS_SERVICE_URL as string;
     this.privateKey = process.env.EXECUTOR_PRIVATE_KEY as string;
@@ -24,92 +24,106 @@ class ReportingClient {
     }
 
     if (!this.privateKey) {
-        throw new Error('EXECUTOR_PRIVATE_KEY is not defined in environment variables');
+      throw new Error('EXECUTOR_PRIVATE_KEY is not defined in environment variables');
     }
-    
+
     this.wallet = new ethers.Wallet(this.privateKey);
   }
 
   async initialize() {
     logger.info('Initializing ReportingClient and authenticating...');
+
+    // Skip authentication in development mode
+    if (process.env.NODE_ENV === 'development' || process.env.SKIP_AUTH === 'true') {
+      logger.warn('Skipping authentication (development mode)');
+      this.accessToken = 'dev-token';
+      this.refreshToken = 'dev-refresh-token';
+      return;
+    }
+
     await this._register();
   }
 
   private async getNonce(): Promise<string> {
     const response = await axios.post(`${this.apiUrl}/operator/nonce`, {
-        walletAddress: this.wallet.address,
+      walletAddress: this.wallet.address,
     });
     return response.data.nonce;
   }
 
   private async _register() {
     try {
-        logger.info('Registering operator...');
-        const nonce = await this.getNonce();
-        const signature = await this.wallet.signMessage(nonce);
-        
-        const response = await axios.post(`${this.apiUrl}/operator/register`, {
-            walletAddress: this.wallet.address,
-            signature: signature,
-        });
+      logger.info('Registering operator...');
+      const nonce = await this.getNonce();
+      const signature = await this.wallet.signMessage(nonce);
 
-        this.accessToken = response.data.accessToken;
-        this.refreshToken = response.data.refreshToken;
-        logger.info('Operator registered successfully.');
-    } catch (error) {
-        logger.error('Failed to register operator', error);
-        throw new Error('Could not register operator with the reporting service.');
+      const response = await axios.post(`${this.apiUrl}/operator/register`, {
+        walletAddress: this.wallet.address,
+        signature: signature,
+      });
+
+      this.accessToken = response.data.accessToken;
+      this.refreshToken = response.data.refreshToken;
+      logger.info('Operator registered successfully.');
+    } catch (error: any) {
+      logger.error('Failed to register operator', {
+        error: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      });
+      throw new Error('Could not register operator with the reporting service.');
     }
   }
 
   private async _refreshToken() {
     try {
-        logger.info('Refreshing token...');
-        if (!this.refreshToken) {
-            throw new Error('No refresh token available.');
-        }
+      logger.info('Refreshing token...');
+      if (!this.refreshToken) {
+        throw new Error('No refresh token available.');
+      }
 
-        const response = await axios.post(`${this.apiUrl}/operator/refresh-token`, {
-            refreshToken: this.refreshToken,
-        });
+      const response = await axios.post(`${this.apiUrl}/operator/refresh-token`, {
+        refreshToken: this.refreshToken,
+      });
 
-        this.accessToken = response.data.accessToken;
-        this.refreshToken = response.data.refreshToken;
-        logger.info('Token refreshed successfully.');
+      this.accessToken = response.data.accessToken;
+      this.refreshToken = response.data.refreshToken;
+      logger.info('Token refreshed successfully.');
     } catch (error) {
-        logger.error('Failed to refresh token', error);
-        // If refresh fails, try to re-register
-        await this._register();
+      logger.error('Failed to refresh token', error);
+      // If refresh fails, try to re-register
+      await this._register();
     }
   }
 
   private async request(method: 'get' | 'post' | 'put' | 'delete', endpoint: string, data?: any) {
     const url = `${this.apiUrl}${endpoint}`;
     const headers = {
-        Authorization: `Bearer ${this.accessToken}`
+      Authorization: `Bearer ${this.accessToken}`
     };
 
     try {
-        const response = await axios({ method, url, data, headers });
-        return response.data;
+      const response = await axios({ method, url, data, headers });
+      return response.data;
     } catch (error: any) {
-        if (error.response && error.response.status === 401) {
-            logger.warn('Request failed with 401. Refreshing token and retrying...');
-            await this._refreshToken();
-            // afrer refresh try again
-            const newHeaders = {
-                Authorization: `Bearer ${this.accessToken}`
-            };
-            try {
-                const response = await axios({ method, url, data, headers: newHeaders });
-                return response.data;
-            } catch (retryError: any) {
-                const errorMessage = retryError.response?.data?.message || retryError.message;
-                logger.error(`Request failed after retry: ${errorMessage}`, retryError);
-                throw retryError;
-            }
+      if (error.response && error.response.status === 401) {
+        logger.warn('Request failed with 401. Refreshing token and retrying...');
+        await this._refreshToken();
+        // afrer refresh try again
+        const newHeaders = {
+          Authorization: `Bearer ${this.accessToken}`
+        };
+        try {
+          const response = await axios({ method, url, data, headers: newHeaders });
+          return response.data;
+        } catch (retryError: any) {
+          const errorMessage = retryError.response?.data?.message || retryError.message;
+          logger.error(`Request failed after retry: ${errorMessage}`, retryError);
+          throw retryError;
         }
-        throw error;
+      }
+      throw error;
     }
   }
 
