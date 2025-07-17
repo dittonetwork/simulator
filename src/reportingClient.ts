@@ -85,32 +85,52 @@ class ReportingClient {
 
   private async request(method: 'get' | 'post' | 'put' | 'delete', endpoint: string, data?: any) {
     const url = `${this.apiUrl}${endpoint}`;
-    const headers = {
-        Authorization: `Bearer ${this.accessToken}`
-    };
+    const maxRetries = 3;
+    let lastError: any;
 
-    try {
-        const response = await axios({ method, url, data, headers });
-        return response.data;
-    } catch (error: any) {
-        if (error.response && error.response.status === 401) {
-            logger.warn('Request failed with 401. Refreshing token and retrying...');
-            await this._refreshToken();
-            // afrer refresh try again
-            const newHeaders = {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const headers = {
                 Authorization: `Bearer ${this.accessToken}`
             };
-            try {
-                const response = await axios({ method, url, data, headers: newHeaders });
-                return response.data;
-            } catch (retryError: any) {
-                const errorMessage = retryError.response?.data?.message || retryError.message;
-                logger.error(`Request failed after retry: ${errorMessage}`, retryError);
-                throw retryError;
+            const response = await axios({ method, url, data, headers });
+            return response.data;
+        } catch (error: any) {
+            lastError = error;
+
+            if (error.response && error.response.status === 401) {
+                logger.warn(`Request failed with 401 on attempt ${attempt} of ${maxRetries}. Refreshing token...`);
+                if (attempt < maxRetries) {
+                    try {
+                        await this._refreshToken();
+                        continue;
+                    } catch (refreshError) {
+                        logger.error('Failed to refresh token, aborting request.', refreshError);
+                        throw refreshError;
+                    }
+                }
+            }
+            
+            const isNetworkError = !error.response;
+            const isServerError = error.response && error.response.status >= 500;
+
+            if (isNetworkError || isServerError) {
+                if (attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt - 1) * 1000;
+                    logger.warn(`Request failed on attempt ${attempt} of ${maxRetries}. Retrying in ${delay}ms...`, {
+                        errorMessage: error.message,
+                    });
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+            } else if (!(error.response && error.response.status === 401)) {
+                throw error;
             }
         }
-        throw error;
     }
+
+    logger.error(`Request failed after ${maxRetries} attempts.`);
+    throw lastError;
   }
 
   public async submitReport(report: any) {
