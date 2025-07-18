@@ -12,6 +12,9 @@ import EventMonitor from './eventMonitor.js';
 import { getLogger } from './logger.js';
 import { TRIGGER_TYPE } from './constants.js';
 import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData } from '@ditto/workflow-sdk';
+import { reportingClient } from './reportingClient.js';
+import { UserOperationReceipt, UserOperation } from 'viem/account-abstraction';
+import { bigIntToString } from './utils.js';
 
 dotenv.config();
 
@@ -361,14 +364,43 @@ class WorkflowProcessor {
 
       if (!this.eventCheckResult.hasEvents) {
         this.log(`Overall: NO EVENTS TRIGGERED - workflow skipped`);
-        return true;
       }
     }
 
-    if (simulationResult && (simulationResult as any).cancelled) {
-      this.log(`Simulation: CANCELLED (AA23 validation error)`);
+    if (simulationResult) {
+      if ((simulationResult as any).cancelled) {
+        this.log(`Simulation: CANCELLED (AA23 validation error)`);
+      } else {
+        this.log(`Simulation: ${simulationResult.success ? 'SUCCESS' : 'FAILED'}`);
+      }
+
+      // Submit report to API
+      if (simulationResult.results) {
+        for (const result of simulationResult.results) {
+          if (!result.userOp) {
+            continue;
+          }
+          const chainId = result.chainId;
+          const blockNumber = await this.eventMonitor.getCurrentBlockNumber(chainId);
+    
+          const report = {
+            ipfsHash: this.workflow.ipfs_hash,
+            simulationSuccess: simulationResult.success,
+            chainsBlockNumbers: {
+              [chainId]: Number(blockNumber),
+            },
+            userOp: bigIntToString(result.userOp),
+          };
+    
+          try {
+            await reportingClient.submitReport(report);
+          } catch (error) {
+            this.error(`Failed to send report for workflow ${this.workflow.ipfs_hash}`, error);
+          }
+        }
+      }
     } else {
-      this.log(`Simulation: ${simulationResult ? (simulationResult.success ? 'SUCCESS' : 'FAILED') : 'SKIPPED'}`);
+      this.log(`Simulation: SKIPPED`);
     }
 
     if (executionResult) {

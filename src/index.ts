@@ -6,6 +6,7 @@ import { getNextSimulationTime } from './parsers/cronParser.js';
 import EventMonitor from './eventMonitor.js';
 import { CHAIN_IDS, TRIGGER_TYPE } from './constants.js';
 import type { Workflow } from './types/workflow.js';
+import { reportingClient } from './reportingClient.js';
 
 dotenv.config();
 const logger = getLogger('Simulator');
@@ -234,6 +235,7 @@ class Simulator {
 
   async run() {
     await this.db.connect();
+    await reportingClient.initialize();
     try {
       while (true) {
         const unsyncedChainsCount = await this.db.getUnsyncedChainsCount();
