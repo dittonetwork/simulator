@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  simulator:
+    build: .
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - DB_NAME=${DB_NAME}
+      - RUNNER_NODE_SLEEP=${RUNNER_NODE_SLEEP}
+      - MAX_WORKERS=${MAX_WORKERS}
+      - FULL_NODE=${FULL_NODE}
+    volumes:
+      - .:/app
+    command: ["node", "src/index.js"] 

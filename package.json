@@ -1,0 +1,62 @@
+{
+    "name": "kerneljs-examples",
+    "version": "1.0.0",
+    "license": "MIT",
+    "type": "module",
+    "workspaces": [
+        "ditto-workflow-sdk"
+    ],
+    "dependencies": {
+        "@zerodev/ecdsa-validator": "^5.4.8",
+        "@zerodev/hooks": "^5.3.4",
+        "@zerodev/intent": "^0.0.25",
+        "@zerodev/multi-chain-ecdsa-validator": "^5.4.5",
+        "@zerodev/permissions": "^5.5.8",
+        "@zerodev/remote-signer": "^5.3.3",
+        "@zerodev/sdk": "^5.4.36",
+        "@zerodev/session-key": "^5.5.3",
+        "@zerodev/weighted-ecdsa-validator": "^5.4.3",
+        "@zerodev/weighted-validator": "^5.4.6",
+        "axios": "^1.10.0",
+        "cron-parser": "^4.6.2",
+        "dotenv": "^16.5.0",
+        "ethers": "^6.13.0",
+        "mongodb": "^6.5.0",
+        "pino": "^8.17.0",
+        "pino-pretty": "^10.3.0",
+        "ts-node": "^10.9.2",
+        "tsx": "^4.7.0",
+        "uuid": "^9.0.0",
+        "viem": "^2.28.0",
+        "zod": "^3.22.4"
+    },
+    "devDependencies": {
+        "@types/node": "^20.17.30",
+        "@types/uuid": "^9.0.0",
+        "@typescript-eslint/eslint-plugin": "^6.7.0",
+        "@typescript-eslint/parser": "^6.7.0",
+        "@vitest/coverage-v8": "^1.4.0",
+        "eslint": "^8.57.0",
+        "eslint-config-airbnb-base": "^15.0.0",
+        "eslint-config-airbnb-typescript": "^17.1.0",
+        "eslint-config-prettier": "^9.0.0",
+        "eslint-plugin-import": "^2.29.1",
+        "eslint-plugin-prettier": "^5.1.3",
+        "prettier": "^3.2.5",
+        "tslib": "^2.8.1",
+        "typescript": "^5.8.3",
+        "vitest": "^1.4.0"
+    },
+    "scripts": {
+        "build": "tsc",
+        "build:watch": "tsc --watch",
+        "start": "node dist/index.js",
+        "dev": "tsx src/index.ts",
+        "test:integration": "tsx src/test-integration.ts",
+        "test:integration:debug": "node --inspect-brk -r tsx/register src/test-integration.ts",
+        "test": "vitest run --coverage",
+        "lint": "eslint \"./src/**/*.{ts,js}\" --fix",
+        "lint:fix": "npm run lint -- --fix",
+        "format": "prettier --write \"./src/**/*.{ts,js,json,md}\""
+    }
+}

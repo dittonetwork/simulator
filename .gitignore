@@ -1,0 +1,40 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+/dist
+/build
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Misc
+*.tgz
+.idea/
+.vscode/
+coverage/
+
+# Ignore local database dumps/backups
+*.dump
+*.bak
+
+# New additions from the code block
+*.nyc_output/
+*.tsbuildinfo
+package-lock.json
