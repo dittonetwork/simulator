@@ -381,18 +381,18 @@ class WorkflowProcessor {
         this.log(`Simulation: ${simulationResult.success ? 'SUCCESS' : 'FAILED'}`);
       }
 
-      this.log(`Simulation result:`, simulationResult);
+      this.log(`Simulation result: ${JSON.stringify(simulationResult)}`);
       // Submit report to API
       if (simulationResult.results) {
         for (const result of simulationResult.results) {
-          this.log(`Result:`, result);
+          this.log(`Result: ${JSON.stringify(result)}`);
 
           if (!result.userOp) {
             continue;
           }
           const chainId = result.chainId;
           const blockNumber = await this.eventMonitor.getCurrentBlockNumber(chainId);
-          this.log(`Block number:`, blockNumber);
+          this.log(`Block number: ${blockNumber}`);
 
           const report = {
             ipfsHash: this.workflow.ipfs_hash,
@@ -402,7 +402,7 @@ class WorkflowProcessor {
             },
             userOp: bigIntToString(result.userOp),
           };
-          this.log(`Report:`, report);
+          this.log(`Report: ${JSON.stringify(report)}`);
           try {
             await reportingClient.submitReport(report);
           } catch (error) {
