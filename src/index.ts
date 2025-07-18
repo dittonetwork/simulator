@@ -49,8 +49,9 @@ class Simulator {
           active++;
           // Resolve correct worker file depending on runtime (ts-node/tsx vs compiled JS)
           const isProd = import.meta.url.endsWith('.js');
+          logger.info(`isProd: ${isProd}`);
           const workerFile = isProd
-            ? new URL('worker.js', import.meta.url)
+            ? new URL('./worker.js', import.meta.url)
             : new URL('./worker.ts', import.meta.url);
 
           const worker = new Worker(workerFile, {
