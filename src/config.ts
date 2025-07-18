@@ -7,11 +7,11 @@ dotenv.config();
 
 export function getConfig() {
   const schema = z.object({
-    mongoUri: z.string().url(),
+    mongoUri: z.string().startsWith('mongodb://'),
     dbName: z.string().min(1),
     rpcUrls: z.object({
-      [CHAIN_IDS.SEPOLIA]: z.string().url(),
-      [CHAIN_IDS.MAINNET]: z.string().url().optional(),
+      [CHAIN_IDS.SEPOLIA]: z.string(),
+      [CHAIN_IDS.MAINNET]: z.string().optional(),
     }),
     chains: z.object({
       [CHAIN_IDS.SEPOLIA]: z.any(),
