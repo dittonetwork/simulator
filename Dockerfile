@@ -19,4 +19,4 @@ RUN npm run build -w @ditto/workflow-sdk
 # Build simulator TypeScript integration
 RUN npm run build
 
-CMD ["npm", "run", "dev"] 
+CMD ["npm", "run", "start"] 
