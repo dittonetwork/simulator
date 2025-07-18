@@ -14,7 +14,7 @@ RUN git submodule update --init --recursive
 RUN npm install
 
 # Build ditto-workflow-sdk workspace first
-RUN npm run build -w ditto-workflow-sdk
+RUN npm run build -w @ditto/workflow-sdk
 
 # Build simulator TypeScript integration
 RUN npm run build
