@@ -2,13 +2,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package manifests first for dependency installation caching
-COPY package*.json ./
-COPY ditto-workflow-sdk/package*.json ./ditto-workflow-sdk/
-RUN npm install
+RUN apk add --no-cache git
 
-# Copy entire project source
+# Copy entire project source first, so we can update submodules
 COPY . .
+
+# Initialize and update submodules
+RUN git submodule update --init --recursive
+
+# Install dependencies for all workspaces
+RUN npm install
 
 # Build ditto-workflow-sdk workspace first
 RUN npm run build -w ditto-workflow-sdk
