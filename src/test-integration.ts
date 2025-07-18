@@ -86,7 +86,13 @@ async function testIntegration() {
     // Step 5: Update MongoDB with workflow data
     logger.info('\n💾 Step 5: Updating MongoDB with workflow data...');
     await db.updateWorkflow(testIpfsHash, {
-      meta: workflowData,
+      meta: {
+        workflow: workflowData,
+        metadata: {
+          createdAt: { $numberLong: Date.now().toString() },
+          version: '1.0.0',
+        },
+      },
       updated_at: new Date(),
     });
     logger.info(`✅ MongoDB updated with workflow data`);
@@ -100,8 +106,8 @@ async function testIntegration() {
     if (testWorkflow) {
       logger.info(`✅ Found our test workflow in results`);
       logger.info(`  - IPFS Hash: ${testWorkflow.ipfs_hash}`);
-      logger.info(`  - Owner: ${testWorkflow.meta?.owner || 'Not loaded'}`);
-      logger.info(`  - Jobs: ${testWorkflow.meta?.jobs?.length || 'Not loaded'}`);
+      logger.info(`  - Owner: ${testWorkflow.meta?.workflow.owner || 'Not loaded'}`);
+      logger.info(`  - Jobs: ${testWorkflow.meta?.workflow.jobs?.length || 'Not loaded'}`);
     }
 
     logger.info('\n🎉 Integration Test Summary:');

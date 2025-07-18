@@ -48,19 +48,37 @@ class Simulator {
           const workflow = workflows[idx++];
           active++;
           // Resolve correct worker file depending on runtime (ts-node/tsx vs compiled JS)
-          const workerFile = process.env.NODE_ENV === 'production' ? './worker.js' : './worker.ts';
-          const worker = new Worker(new URL(workerFile, import.meta.url), {
+          const isProd = import.meta.url.endsWith('.js');
+          const workerFile = isProd
+            ? new URL('worker.js', import.meta.url)
+            : new URL('./worker.ts', import.meta.url);
+
+          const worker = new Worker(workerFile, {
             workerData: { workflow },
+            ...(!isProd && { execArgv: ['--loader', 'tsx'] }),
           });
           worker.on('message', (result) => {
             if (result && result.error) {
-              logger.error('Worker error', { error: result.error });
+              logger.error('Worker error', {
+                workflow: workflow.ipfs_hash,
+                error: result.error.message,
+                stack: result.error.stack,
+              });
             }
           });
           worker.on('error', (err) => {
-            logger.error('Worker thread error', { error: err });
+            logger.error('Worker thread error', {
+              workflow: workflow.ipfs_hash,
+              error: err.message,
+              stack: err.stack,
+            });
           });
-          worker.on('exit', () => {
+          worker.on('exit', (code) => {
+            if (code !== 0) {
+              logger.error(`Worker stopped with exit code ${code}`, {
+                workflow: workflow.ipfs_hash,
+              });
+            }
             active--;
             next();
           });

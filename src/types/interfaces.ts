@@ -10,9 +10,19 @@ export interface BlockTrackingEntry {
 
 export type BlockTracking = Record<string, BlockTrackingEntry>;
 
+export interface MetaShape {
+  workflow: Workflow;
+  metadata: {
+    createdAt: {
+      $numberLong: string;
+    };
+    version: string;
+  };
+}
+
 export interface WorkflowDocument {
   ipfs_hash: string;
-  meta: Workflow | null;
+  meta: MetaShape | null;
   runs: number;
   is_cancelled: boolean;
   next_simulation_time: Date | null;

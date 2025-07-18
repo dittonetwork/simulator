@@ -103,10 +103,10 @@ class WorkflowProcessor {
     // Validate triggers (no parsing needed)
     const { meta } = this.workflow;
     if (!meta) return false;
-    this.validateTriggers(meta.triggers);
+    this.validateTriggers(meta.workflow.triggers);
 
     // Check event triggers if any exist
-    const eventTriggers = meta.triggers.filter((trigger: Trigger) => trigger.type === TRIGGER_TYPE.EVENT);
+    const eventTriggers = meta.workflow.triggers.filter((trigger: Trigger) => trigger.type === TRIGGER_TYPE.EVENT);
     if (eventTriggers.length > 0) {
       this.eventCheckResult = await this.eventMonitor.checkEventTriggers(this.workflow, this.db);
 
@@ -144,7 +144,7 @@ class WorkflowProcessor {
       // Check if workflow data is already in meta field (from MongoDB)
       if (this.workflow.meta) {
         simulationResult = await this.workflowSDK.simulateWorkflow(
-          this.workflow.meta,
+          this.workflow.meta.workflow,
           this.workflow.ipfs_hash,
         );
       } else {
@@ -156,7 +156,14 @@ class WorkflowProcessor {
         );
 
         // Store the workflow data in meta for future use
-        this.workflow.meta = workflowData;
+        this.workflow.meta = {
+          workflow: workflowData,
+          metadata: {
+            // Placeholder for metadata if needed
+            createdAt: { $numberLong: Date.now().toString() },
+            version: '1.0.0',
+          },
+        };
       }
 
       // Check simulation result for AA23 validation error
@@ -218,7 +225,7 @@ class WorkflowProcessor {
       }
 
       const executionResult = await this.workflowSDK.executeWorkflow(
-        this.workflow.meta,
+        this.workflow.meta.workflow,
         this.workflow.ipfs_hash,
       );
 
@@ -463,12 +470,14 @@ class WorkflowProcessor {
     try {
       const obj = new Workflow(this.workflow);
       this.workflow = obj;
+
       await this.initializeSDK();
 
       const { simulationResult, executionResult, cancelled } = await this.handleWorkflow();
 
       if (!cancelled) {
         await this.storeLastSimulationResult(simulationResult, executionResult);
+
         await this.scheduleNextRun(simulationResult, executionResult);
       }
     } finally {
@@ -480,16 +489,22 @@ class WorkflowProcessor {
 // Entry point for worker thread
 (async () => {
   if (!workerData || !workerData.workflow) {
+    getLogger('Worker').error('Worker started without workflow data');
     throw new Error('workerData.workflow is required. Do not run worker.js directly.');
   }
 
   const processor = new WorkflowProcessor(workerData.workflow);
   try {
+    getLogger('Worker').info(`Starting processing for workflow: ${workerData.workflow.ipfs_hash}`);
     await processor.process();
+    getLogger('Worker').info(`Finished processing for workflow: ${workerData.workflow.ipfs_hash}`);
     if (parentPort) parentPort.postMessage({ success: true });
   } catch (e) {
     const err = e as Error;
-    getLogger('Worker').error('Processing failed', { error: err.message || err.toString() });
-    if (parentPort) parentPort.postMessage({ error: err.message });
+    getLogger('Worker').error(`Processing failed for workflow: ${workerData.workflow.ipfs_hash}`, {
+      error: err.message || err.toString(),
+      stack: err.stack,
+    });
+    if (parentPort) parentPort.postMessage({ error: { message: err.message, stack: err.stack } });
   }
 })();

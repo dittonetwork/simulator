@@ -1,10 +1,10 @@
-import { WorkflowDocument, BlockTracking } from './interfaces.js';
+import { WorkflowDocument, BlockTracking, MetaShape } from './interfaces.js';
 import { Workflow as WorkflowMeta, Job, Trigger } from '@ditto/workflow-sdk';
 
 export class Workflow implements WorkflowDocument {
   ipfs_hash!: string;
 
-  meta!: WorkflowMeta | null;
+  meta!: MetaShape | null;
 
   runs!: number;
 
@@ -19,15 +19,15 @@ export class Workflow implements WorkflowDocument {
   }
 
   get owner() {
-    return this.meta?.owner || '';
+    return this.meta?.workflow.owner || '';
   }
 
   get triggers(): Trigger[] {
-    return this.meta?.triggers || [];
+    return this.meta?.workflow.triggers || [];
   }
 
   get jobs(): Job[] {
-    return this.meta?.jobs || [];
+    return this.meta?.workflow.jobs || [];
   }
 
   getIpfsHashShort() {
