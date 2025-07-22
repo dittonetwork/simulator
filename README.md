@@ -35,7 +35,7 @@ npm run build -w ditto-workflow-sdk
 cp .env.example .env
 
 # compile
-npm ci
+npm install
 npm run build
 
 # run the simulator (dev)
