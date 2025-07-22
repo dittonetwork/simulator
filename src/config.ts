@@ -15,7 +15,7 @@ export function getConfig() {
     }),
     chains: z.object({
       [CHAIN_IDS.SEPOLIA]: z.any(),
-      [CHAIN_IDS.MAINNET]: z.any(),
+      [CHAIN_IDS.MAINNET]: z.any().optional(),
     }),
     maxWorkers: z.number().int().positive(),
     runnerSleepMs: z.number().int().positive(),
@@ -36,7 +36,6 @@ export function getConfig() {
     } as Record<number, string>,
     chains: {
       [CHAIN_IDS.SEPOLIA]: sepolia,
-      [CHAIN_IDS.MAINNET]: mainnet,
     },
     maxWorkers: parseInt(process.env.MAX_WORKERS || '4', 10),
     runnerSleepMs: parseInt(process.env.RUNNER_NODE_SLEEP || '60', 10) * 1000,
