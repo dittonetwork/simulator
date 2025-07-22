@@ -31,6 +31,9 @@ npm ci
 # copy and adjust environment variables
 cp env.example .env
 
+# install dependencies
+npm install 
+
 # compile
 npm run build
 
