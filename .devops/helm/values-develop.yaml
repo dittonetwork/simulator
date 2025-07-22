@@ -119,9 +119,9 @@ affinity: {}
 secretName: simulator-env
 env:
   DB_NAME: "indexer"
-  MAX_WORKERS: 1
-  RUNNER_NODE_SLEEP: 60
-  FULL_NODE: "false"
+  MAX_WORKERS: 4
+  RUNNER_NODE_SLEEP: 5
+  FULL_NODE: "true"
   MAX_MISSING_NEXT_SIM_LIMIT: 100
   MAX_BLOCK_RANGE_11155111: 10000
   MAX_BLOCK_RANGE_1: 2000
@@ -129,4 +129,5 @@ env:
   LOG_LEVEL: "info"
   LOG_PRETTY: "true"
   CHAIN_ID: 11155111
+  SKIP_AUTH: "true"
   IPFS_SERVICE_URL: "https://ipfs-service.develop.dittonetwork.io"
