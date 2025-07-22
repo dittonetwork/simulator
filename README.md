@@ -26,13 +26,13 @@ A TypeScript-based workflow simulation runner that fetches workflow metadata fro
 # clone & install
 git clone <repo>
 cd simulator
-npm ci
+
+npm install
+git submodule update --init --recursive
+npm run build -w ditto-workflow-sdk
 
 # copy and adjust environment variables
 cp env.example .env
-
-# install dependencies
-npm install 
 
 # compile
 npm run build

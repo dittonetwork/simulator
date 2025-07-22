@@ -7,7 +7,6 @@
         "ditto-workflow-sdk"
     ],
     "dependencies": {
-        "@ditto/workflow-sdk": "^1.0.0",
         "@zerodev/ecdsa-validator": "^5.4.8",
         "@zerodev/hooks": "^5.3.4",
         "@zerodev/intent": "^0.0.25",
