@@ -32,9 +32,10 @@ git submodule update --init --recursive
 npm run build -w ditto-workflow-sdk
 
 # copy and adjust environment variables
-cp env.example .env
+cp .env.example .env
 
 # compile
+npm ci
 npm run build
 
 # run the simulator (dev)
