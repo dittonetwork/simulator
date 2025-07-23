@@ -47,6 +47,8 @@ jobs:
     name: Build
     steps:
       - uses: actions/checkout@v4
+      - name: Update git submodules
+        run: git submodule update --init --recursive
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
