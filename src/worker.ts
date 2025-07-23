@@ -9,11 +9,11 @@ import type { WorkflowDocument } from './types/interfaces.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
 import type { WorkflowSDKService } from './integrations/workflowSDK.js';
 import EventMonitor from './eventMonitor.js';
+import OnchainChecker from './onchainChecker.js';
 import { getLogger } from './logger.js';
 import { TRIGGER_TYPE } from './constants.js';
 import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData } from '@ditto/workflow-sdk';
 import { reportingClient } from './reportingClient.js';
-import { UserOperationReceipt, UserOperation } from 'viem/account-abstraction';
 import { bigIntToString } from './utils.js';
 
 dotenv.config();
@@ -29,11 +29,15 @@ class WorkflowProcessor {
 
   private eventMonitor: EventMonitor;
 
+  private onchainChecker: OnchainChecker;
+
   private workerId: string;
 
   private logger: Logger;
 
   private eventCheckResult: boolean | { hasEvents: boolean; results: any[] } | null;
+
+  private onchainCheckResult: { allTrue: boolean; results: any[] } | null;
 
   private static readonly ERROR_PATTERNS = [
     { regex: /AA23 reverted.*0xc48cf8ee/, summary: 'AA23 validation error: Contract rejected markRun call (0xc48cf8ee)' },
@@ -52,9 +56,11 @@ class WorkflowProcessor {
     this.db = new Database();
     this.workflowSDK = null;
     this.eventMonitor = new EventMonitor();
+    this.onchainChecker = new OnchainChecker();
     this.workerId = uuidv4();
     this.logger = getLogger(`Worker-${this.workerId}`);
     this.eventCheckResult = null;
+    this.onchainCheckResult = null;
   }
 
   log(message: string): void {
@@ -93,6 +99,13 @@ class WorkflowProcessor {
           }
           break;
         }
+        case TRIGGER_TYPE.ONCHAIN: {
+          const params = (trigger as any).params;
+          if (!params?.abi || !params?.target) {
+            this.log(`Warning: Onchain trigger at index ${idx} missing abi or target`);
+          }
+          break;
+        }
         default:
           this.log(`Warning: Unknown trigger type at index ${idx}: ${(trigger as any).type}`);
       }
@@ -105,7 +118,28 @@ class WorkflowProcessor {
     if (!meta) return false;
     this.validateTriggers(meta.workflow.triggers);
 
-    // Check event triggers if any exist
+    // 1. Check on-chain triggers first (AND logic):
+    const onchainTriggers = meta.workflow.triggers.filter((t: any) => t.type === TRIGGER_TYPE.ONCHAIN);
+    if (onchainTriggers.length > 0) {
+      this.onchainCheckResult = await this.onchainChecker.checkOnchainTriggers(this.workflow.meta?.workflow);
+
+      // Log onchain checking details
+      this.onchainCheckResult.results.forEach((res) => {
+        if (res.error) {
+          this.error(`Onchain trigger ${res.triggerIndex}: ${res.error}`);
+        } else {
+          this.log(`Onchain trigger ${res.triggerIndex}: ${res.success ? 'TRUE' : 'FALSE'} (block ${res.blockNumber || 'N/A'})`);
+        }
+      });
+
+      if (!this.onchainCheckResult.allTrue) {
+        this.log('Onchain trigger conditions not met - workflow skipped');
+        return false; // Stop further processing
+      }
+      this.log('Onchain triggers satisfied! Proceeding to event triggers');
+    }
+
+    // 2. Check event triggers if any exist
     const eventTriggers = meta.workflow.triggers.filter((trigger: Trigger) => trigger.type === TRIGGER_TYPE.EVENT);
     if (eventTriggers.length > 0) {
       this.eventCheckResult = await this.eventMonitor.checkEventTriggers(this.workflow, this.db);
@@ -355,6 +389,22 @@ class WorkflowProcessor {
 
   async report(simulationResult: any, executionResult: any = null, triggerResult: any = null): Promise<boolean> {
     this.log(`Reporting for workflow ${this.workflow.getIpfsHashShort()}`);
+
+    // Onchain trigger report
+    if (this.onchainCheckResult) {
+      this.log('Onchain Triggers:');
+      this.onchainCheckResult.results.forEach((res) => {
+        if (res.error) {
+          this.log(`  Trigger ${res.triggerIndex}: ERROR - ${res.error}`);
+        } else {
+          this.log(`  Trigger ${res.triggerIndex}: ${res.success ? 'TRUE' : 'FALSE'} (block ${res.blockNumber || 'N/A'})`);
+        }
+      });
+
+      if (!this.onchainCheckResult.allTrue) {
+        this.log('Overall: ONCHAIN CONDITIONS NOT MET - workflow skipped');
+      }
+    }
 
     // Report event trigger results if any
     if (triggerResult && this.eventCheckResult && typeof this.eventCheckResult !== 'boolean') {

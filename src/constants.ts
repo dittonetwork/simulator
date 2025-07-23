@@ -11,6 +11,7 @@ export const COLLECTIONS = Object.freeze({
 export const TRIGGER_TYPE = Object.freeze({
   CRON: 'cron',
   EVENT: 'event',
+  ONCHAIN: 'onchain',
 });
 
 export const ERROR_CODES = Object.freeze({
