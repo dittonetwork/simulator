@@ -30,9 +30,27 @@ class ReportingClient {
     this.wallet = new ethers.Wallet(this.privateKey);
   }
 
+  getAccessToken() {
+    return this.accessToken;
+  }
+
+  getRefreshToken() {
+    return this.refreshToken;
+  }
+
+  setTokens(accessToken: string, refreshToken: string) {
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+  }
+
   async initialize() {
-    logger.info('Initializing ReportingClient and authenticating...');
-    await this._register();
+    logger.info('Initializing ReportingClient...');
+    if (!this.accessToken) {
+        logger.info('No access token found, authenticating...');
+        await this._register();
+    } else {
+        logger.info('Access token already present, skipping authentication.');
+    }
   }
 
   private async getNonce(): Promise<string> {
@@ -60,6 +78,10 @@ class ReportingClient {
         logger.error('Failed to register operator', error);
         throw new Error('Could not register operator with the reporting service.');
     }
+  }
+
+  async doRefreshToken() {
+    await this._refreshToken();
   }
 
   private async _refreshToken() {
