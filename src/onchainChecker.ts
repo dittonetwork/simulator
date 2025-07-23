@@ -76,6 +76,10 @@ export default class OnchainChecker {
       const abiItem = parseAbiItem(`function ${trigger.params.abi} view returns (bool)`);
       const functionName = (abiItem as import('viem').AbiFunction).name;
 
+      // Obtain the current block once and use it for a consistent read
+      const currentBlockBigInt = await client.getBlockNumber();
+      const currentBlockNumber = Number(currentBlockBigInt);
+
       while (attempt < this.retries && !success) {
         try {
           const res = await this.callWithTimeout(async () => client.readContract({
@@ -83,6 +87,7 @@ export default class OnchainChecker {
             abi: [abiItem],
             functionName: functionName as any,
             args: trigger.params.args,
+            blockNumber: currentBlockBigInt,
           }));
           success = res === true;
           resultVal = res;
@@ -94,8 +99,7 @@ export default class OnchainChecker {
       }
 
       if (!success) allTrue = false;
-      const blockNumber = client ? Number(await client.getBlockNumber()) : undefined;
-      results.push({ triggerIndex: idx, chainId, success, result: resultVal, error: errorMsg, blockNumber });
+      results.push({ triggerIndex: idx, chainId, success, result: resultVal, error: errorMsg, blockNumber: currentBlockNumber });
 
       // no DB update per requirements
     }
