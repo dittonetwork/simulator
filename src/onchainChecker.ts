@@ -84,6 +84,7 @@ export default class OnchainChecker {
             abi: [abiItem],
             functionName: functionName as any,
             args: trigger.params.args,
+            value: trigger.params.value,
             blockNumber: currentBlockBigInt,
           }));
           success = res === true;
