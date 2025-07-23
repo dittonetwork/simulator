@@ -1,6 +1,6 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
-import { getConfig } from './config.ts';
-import { getLogger } from './logger.ts';
+import { getConfig } from './config.js';
+import { getLogger } from './logger.js';
 import { OnchainTrigger, Workflow } from "@ditto/workflow-sdk";
 
 /**
@@ -19,8 +19,6 @@ export interface OnchainCheckAggregate {
   allTrue: boolean;
   results: OnchainTriggerCheck[];
 }
-
-// type Workflow = BaseWorkflow & { triggers?: any[]; };
 
 export default class OnchainChecker {
   private clients: Map<number, any> = new Map();
@@ -51,7 +49,6 @@ export default class OnchainChecker {
 
   async checkOnchainTriggers(workflow: Workflow | undefined): Promise<OnchainCheckAggregate> {
     if (!workflow) return { allTrue: true, results: [] };
-    // this.logger.info(workflow);
     const triggers = (workflow.triggers || []).filter((t: any) => t.type === 'onchain') as OnchainTrigger[];
     if (triggers.length === 0) return { allTrue: true, results: [] };
 
@@ -100,8 +97,6 @@ export default class OnchainChecker {
 
       if (!success) allTrue = false;
       results.push({ triggerIndex: idx, chainId, success, result: resultVal, error: errorMsg, blockNumber: currentBlockNumber });
-
-      // no DB update per requirements
     }
 
     return { allTrue, results };
