@@ -39,6 +39,7 @@ class ReportingClient {
   }
 
   setTokens(accessToken: string, refreshToken: string) {
+    logger.info(`Tokens set programmatically. Access token is ${accessToken ? 'present' : 'absent'}.`);
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
   }
@@ -46,10 +47,10 @@ class ReportingClient {
   async initialize() {
     logger.info('Initializing ReportingClient...');
     if (!this.accessToken) {
-        logger.info('No access token found, authenticating...');
+        logger.info('No access token found, proceeding to register.');
         await this._register();
     } else {
-        logger.info('Access token already present, skipping authentication.');
+        logger.info('Access token already present, skipping registration.');
     }
   }
 

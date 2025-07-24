@@ -64,6 +64,9 @@ class Simulator {
             },
             ...(!isProd && { execArgv: ['--loader', 'tsx'] }),
           });
+          logger.info(
+            `Spawning worker for ${workflow.getIpfsHashShort()} with token: ${reportingClient.getAccessToken() ? 'present' : 'absent'}`,
+          );
           worker.on('message', (result) => {
             if (result && result.error) {
               logger.error('Worker error', {

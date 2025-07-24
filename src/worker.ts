@@ -501,6 +501,11 @@ class WorkflowProcessor {
     throw new Error('workerData.workflow is required. Do not run worker.js directly.');
   }
 
+  const { workflow, accessToken, refreshToken } = workerData;
+  getLogger('Worker').info(
+    `Worker for ${workflow.ipfs_hash} started with token: ${accessToken ? 'present' : 'absent'}`,
+  );
+
   const processor = new WorkflowProcessor(workerData.workflow);
   try {
     getLogger('Worker').info(`Starting processing for workflow: ${workerData.workflow.ipfs_hash}`);
