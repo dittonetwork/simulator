@@ -130,7 +130,7 @@ export class EventMonitor {
       return logs;
     } catch (e) {
       const err = e as Error;
-      logger.error({ err, chainId, fromBlock, toBlock }, 'error querying events');
+      logger.error({ error: err, chainId: chainId, fromBlock: fromBlock, toBlock: toBlock }, 'error querying events');
       throw err;
     }
   }
@@ -191,7 +191,7 @@ export class EventMonitor {
         logger.info({ chainId, currentBlock }, 'updated chain last_processed_block');
       } catch (e) {
         const err = e as Error;
-        logger.error({ err, chainId }, 'error checking events');
+        logger.error({ error:err, chainId: chainId }, 'error checking events');
         triggersByChain.get(chainId)!.forEach(({ trigger, index }) => {
           eventResults.push({ triggerIndex: index, chainId, signature: trigger.params?.signature || 'unknown', error: err.message, fromBlock: null, toBlock: null, blocksChecked: 0 });
         });

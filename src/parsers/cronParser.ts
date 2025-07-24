@@ -54,7 +54,7 @@ export function getNextSimulationTime(triggers: Trigger[]): Date {
       }
     } catch (e) {
       const err = e as Error;
-      logger.error(`Invalid cron expression ${cronExpr}`, { error: err.message || err.toString() });
+      logger.error({ error: err.message || err.toString() }, `Invalid cron expression ${cronExpr}`);
     }
   }
   if (!nextTime) throw new Error('No valid cron trigger found');
