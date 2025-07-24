@@ -57,7 +57,7 @@ class ReportingClient {
         this.refreshToken = response.data.refreshToken;
         logger.info('Operator registered successfully.');
     } catch (error) {
-        logger.error('Failed to register operator', error);
+        logger.error({ error: error }, 'Failed to register operator');
         throw new Error('Could not register operator with the reporting service.');
     }
   }
@@ -77,7 +77,7 @@ class ReportingClient {
         this.refreshToken = response.data.refreshToken;
         logger.info('Token refreshed successfully.');
     } catch (error) {
-        logger.error('Failed to refresh token', error);
+        logger.error({ error: error }, 'Failed to refresh token');
         // If refresh fails, try to re-register
         await this._register();
     }
@@ -105,7 +105,7 @@ class ReportingClient {
                         await this._refreshToken();
                         continue;
                     } catch (refreshError) {
-                        logger.error('Failed to refresh token, aborting request.', refreshError);
+                        logger.error({ error: refreshError }, 'Failed to refresh token, aborting request.');
                         throw refreshError;
                     }
                 }
