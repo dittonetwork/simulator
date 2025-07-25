@@ -94,6 +94,10 @@ class ReportingClient {
 
         const response = await axios.post(`${this.apiUrl}/operator/refresh-token`, {
             refreshToken: this.refreshToken,
+        }, {
+            headers: {
+                Authorization: `Bearer ${this.accessToken}`
+            }
         });
 
         this.accessToken = response.data.accessToken;
