@@ -30,9 +30,28 @@ class ReportingClient {
     this.wallet = new ethers.Wallet(this.privateKey);
   }
 
+  getAccessToken() {
+    return this.accessToken;
+  }
+
+  getRefreshToken() {
+    return this.refreshToken;
+  }
+
+  setTokens(accessToken: string, refreshToken: string) {
+    logger.info(`Tokens set programmatically. Access token is ${accessToken ? 'present' : 'absent'}.`);
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+  }
+
   async initialize() {
-    logger.info('Initializing ReportingClient and authenticating...');
-    await this._register();
+    logger.info('Initializing ReportingClient...');
+    if (!this.accessToken) {
+        logger.info('No access token found, proceeding to register.');
+        await this._register();
+    } else {
+        logger.info('Access token already present, skipping registration.');
+    }
   }
 
   private async getNonce(): Promise<string> {
@@ -62,6 +81,10 @@ class ReportingClient {
     }
   }
 
+  async doRefreshToken() {
+    await this._refreshToken();
+  }
+
   private async _refreshToken() {
     try {
         logger.info('Refreshing token...');
@@ -71,6 +94,10 @@ class ReportingClient {
 
         const response = await axios.post(`${this.apiUrl}/operator/refresh-token`, {
             refreshToken: this.refreshToken,
+        }, {
+            headers: {
+                Authorization: `Bearer ${this.accessToken}`
+            }
         });
 
         this.accessToken = response.data.accessToken;
