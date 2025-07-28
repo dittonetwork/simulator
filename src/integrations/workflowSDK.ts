@@ -69,7 +69,7 @@ export class WorkflowSDKIntegration {
 
       return workflowData;
     } catch (error) {
-      logger.error(`Failed to load workflow from IPFS:`, error);
+      logger.error({ error: error }, 'Failed to load workflow from IPFS');
       throw error;
     }
   }
@@ -103,7 +103,7 @@ export class WorkflowSDKIntegration {
 
       return result as SimulationResult;
     } catch (error) {
-      logger.error(`Simulation failed:`, error);
+      logger.error({ error: error }, 'Simulation failed');
       throw error;
     }
   }
@@ -141,7 +141,7 @@ export class WorkflowSDKIntegration {
 
       return result as ExecutionResult;
     } catch (error) {
-      logger.error(`Execution failed:`, error);
+      logger.error({ error: error }, 'Execution failed');
       throw error;
     }
   }
