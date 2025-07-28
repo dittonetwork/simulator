@@ -118,7 +118,7 @@ async function testIntegration() {
     logger.info('✅ MongoDB storage integration works');
     logger.info('\n🔥 The simulator is ready to process workflows with real execution!');
   } catch (error) {
-    logger.error('❌ Integration test failed:', error);
+    logger.error({ error: error }, '❌ Integration test failed');
     throw error;
   } finally {
     await db.close();
@@ -127,6 +127,6 @@ async function testIntegration() {
 
 // Run the test
 testIntegration().catch((error) => {
-  logger.error('Test failed:', error);
+  logger.error({ error: error }, 'Test failed');
   process.exit(1);
 });

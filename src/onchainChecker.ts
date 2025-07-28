@@ -91,7 +91,7 @@ export default class OnchainChecker {
           resultVal = res;
         } catch (e) {
           errorMsg = (e as Error).message;
-          this.logger.error({ e }, `Onchain trigger ${idx} failed attempt ${attempt + 1}`);
+          this.logger.error({ error: e }, `Onchain trigger ${idx} failed attempt ${attempt + 1}`);
         }
         attempt++;
       }

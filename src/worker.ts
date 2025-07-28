@@ -70,7 +70,7 @@ class WorkflowProcessor {
   error(message: string, error: unknown = null): void {
     const err = error as Error | null;
     const errorMsg = err ? err.message || err.toString() : '';
-    this.logger.error(message, { error: errorMsg });
+    this.logger.error({ error: errorMsg }, message);
   }
 
   async initializeReportingClient(accessToken?: string, refreshToken?: string) {

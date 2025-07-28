@@ -77,11 +77,7 @@ class Simulator {
             }
           });
           worker.on('error', (err) => {
-            logger.error('Worker thread error', {
-              workflow: workflow.ipfs_hash,
-              error: err.message,
-              stack: err.stack,
-            });
+            logger.error({ workflow: workflow.ipfs_hash, error: err }, 'Worker thread error');
           });
           worker.on('exit', (code) => {
             if (code !== 0) {
@@ -318,7 +314,7 @@ class Simulator {
         await new Promise((res) => setTimeout(res, this.sleep));
       }
     } catch (err) {
-      logger.error('Error in main loop', { error: err });
+      logger.error({ error: err }, 'Error in main loop');
     } finally {
       await this.db.close();
     }
