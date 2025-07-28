@@ -73,6 +73,13 @@ class WorkflowProcessor {
     this.logger.error({ error: errorMsg }, message);
   }
 
+  async initializeReportingClient(accessToken?: string, refreshToken?: string) {
+    if (accessToken && refreshToken) {
+      reportingClient.setTokens(accessToken, refreshToken);
+    }
+    await reportingClient.initialize();
+  }
+
   async initializeSDK() {
     try {
       this.workflowSDK = getWorkflowSDKService();
@@ -522,6 +529,7 @@ class WorkflowProcessor {
       this.workflow = obj;
 
       await this.initializeSDK();
+      await this.initializeReportingClient(workerData.accessToken, workerData.refreshToken);
 
       const { simulationResult, executionResult, cancelled } = await this.handleWorkflow();
 
@@ -542,6 +550,11 @@ class WorkflowProcessor {
     getLogger('Worker').error('Worker started without workflow data');
     throw new Error('workerData.workflow is required. Do not run worker.js directly.');
   }
+
+  const { workflow, accessToken, refreshToken } = workerData;
+  getLogger('Worker').info(
+    `Worker for ${workflow.ipfs_hash} started with token: ${accessToken ? 'present' : 'absent'}`,
+  );
 
   const processor = new WorkflowProcessor(workerData.workflow);
   try {

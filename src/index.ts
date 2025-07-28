@@ -26,10 +26,13 @@ class Simulator {
 
   private chainSyncCheckInterval!: number;
 
+  private tokenRefreshInterval!: number;
+
   constructor() {
     this.sleep = parseInt(process.env.RUNNER_NODE_SLEEP || '60', 10) * 1000;
     this.maxWorkers = parseInt(process.env.MAX_WORKERS || '4', 10);
     this.chainSyncCheckInterval = parseInt(process.env.CHAIN_SYNC_CHECK_INTERVAL_MS || '5000', 10);
+    this.tokenRefreshInterval = parseInt(process.env.TOKEN_REFRESH_INTERVAL_MS || '3600000', 10);
     this.db = new Database();
     this.eventMonitor = new EventMonitor();
     this.blockNumberCache = new Map<number, number>(); // Cache block numbers per chain
@@ -54,9 +57,16 @@ class Simulator {
             : new URL('./worker.ts', import.meta.url);
 
           const worker = new Worker(workerFile, {
-            workerData: { workflow },
+            workerData: {
+              workflow,
+              accessToken: reportingClient.getAccessToken(),
+              refreshToken: reportingClient.getRefreshToken(),
+            },
             ...(!isProd && { execArgv: ['--loader', 'tsx'] }),
           });
+          logger.info(
+            `Spawning worker for ${workflow.getIpfsHashShort()} with token: ${reportingClient.getAccessToken() ? 'present' : 'absent'}`,
+          );
           worker.on('message', (result) => {
             if (result && result.error) {
               logger.error('Worker error', {
@@ -250,6 +260,13 @@ class Simulator {
   async run() {
     await this.db.connect();
     await reportingClient.initialize();
+    
+    setInterval(() => {
+      reportingClient.doRefreshToken().catch(err => {
+        logger.error('Failed to refresh token in background', { error: err });
+      });
+    }, this.tokenRefreshInterval);
+
     try {
       while (true) {
         const unsyncedChainsCount = await this.db.getUnsyncedChainsCount();
