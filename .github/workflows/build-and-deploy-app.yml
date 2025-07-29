@@ -84,11 +84,13 @@ jobs:
       env:
         SECRET_NAMESPACE: epsilon
         SECRET_NAME: simulator-env
-        SECRET_KEYS: MONGO_URI,RPC_URL,DEFAULT_RPC_URL_SEPOLIA,EXECUTOR_PRIVATE_KEY
+        SECRET_KEYS: MONGO_URI,RPC_URL,DEFAULT_RPC_URL_SEPOLIA,EXECUTOR_PRIVATE_KEY,RPC_URL_11155111,RPC_URL_8453
         MONGO_URI: ${{ secrets.MONGO_URI }}
         RPC_URL: ${{ secrets.RPC_URL }}
         DEFAULT_RPC_URL_SEPOLIA: ${{ secrets.DEFAULT_RPC_URL_SEPOLIA }}
         EXECUTOR_PRIVATE_KEY: ${{ secrets.EXECUTOR_PRIVATE_KEY }}
+        RPC_URL_11155111: ${{ secrets.RPC_URL_11155111 }}
+        RPC_URL_8453: ${{ secrets.RPC_URL_8453 }}
       run: |
         IFS=',' read -ra KEYS <<< "$SECRET_KEYS"
         args=(create secret generic "$SECRET_NAME" -n "$SECRET_NAMESPACE" --dry-run=client -o yaml)
