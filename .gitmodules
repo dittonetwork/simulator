@@ -1,4 +1,4 @@
 [submodule "ditto-workflow-sdk"]
 	path = ditto-workflow-sdk
 	url = https://github.com/dittonetwork/ditto-workflow-sdk.git
-	branch = onchain_trigger # TODO: change this to master
+	branch = master
