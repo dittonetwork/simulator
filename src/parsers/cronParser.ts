@@ -2,6 +2,7 @@ import cronParser from 'cron-parser';
 import { TRIGGER_TYPE } from '../constants.js';
 import { getLogger } from '../logger.js';
 import type { Trigger } from '@ditto/workflow-sdk';
+import { Workflow } from '../types/workflow.js';
 
 const logger = getLogger('CronParser');
 
@@ -15,10 +16,7 @@ export function parseCronConfig(cfg: CronCfg) {
   }
   const expression = (cfg as any).params.schedule as string;
 
-  // Validate that the cron expression is syntactically correct. This prevents
-  // invalid schedules from being stored and causing runtime errors later.
   try {
-    // Attempt to parse once; cron-parser will throw on invalid expressions.
     cronParser.parseExpression(expression, { currentDate: new Date() });
   } catch (e) {
     throw new Error(`Invalid cron schedule: ${expression}`);
@@ -30,16 +28,26 @@ export function parseCronConfig(cfg: CronCfg) {
   };
 }
 
-export function getNextSimulationTime(triggers: Trigger[]): Date {
-  if (!Array.isArray(triggers) || triggers.length === 0) {
-    throw new Error('triggers must be a non-empty array');
+export function getNextSimulationTime(workflow: Workflow): Date | null {
+  const triggers = workflow.triggers;
+  const validAfter = workflow.meta?.workflow?.validAfter;
+
+  if (!triggers || triggers.length === 0) {
+    if (validAfter) {
+      return new Date(validAfter * 1000);
+    }
+    return null;
   }
-  // Only support new format: meta.workflow.triggers
+
   const cronConfigs = triggers
     .filter((cfg) => cfg.type === TRIGGER_TYPE.CRON && (cfg.params as any)?.schedule)
     .map((cfg) => ({ expression: (cfg.params as any).schedule as string }));
 
-  let nextTime = null;
+  if (cronConfigs.length === 0) {
+    return new Date();
+  }
+
+  let nextTime: Date | null = null;
   for (const cfg of cronConfigs) {
     const cronExpr = cfg.expression;
     if (!cronExpr) continue;
@@ -55,8 +63,9 @@ export function getNextSimulationTime(triggers: Trigger[]): Date {
       logger.error({ error: err.message || err.toString() }, `Invalid cron expression ${cronExpr}`);
     }
   }
+
   if (!nextTime) {
-    nextTime = new Date();
+    return new Date();
   }
   return nextTime;
 }

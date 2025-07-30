@@ -120,20 +120,17 @@ class WorkflowProcessor {
   }
 
   async understandTrigger() {
+    // Validate triggers (no parsing needed)
     const { meta } = this.workflow;
     if (!meta) return false;
-
-    if (!meta.workflow.triggers || meta.workflow.triggers.length === 0) {
-      this.log('No triggers found, executing once.');
-      return true;
-    }
-
     this.validateTriggers(meta.workflow.triggers);
 
+    // 1. Check on-chain triggers first (AND logic):
     const onchainTriggers = meta.workflow.triggers.filter((t: any) => t.type === TRIGGER_TYPE.ONCHAIN);
     if (onchainTriggers.length > 0) {
       this.onchainCheckResult = await this.onchainChecker.checkOnchainTriggers(this.workflow.meta?.workflow);
 
+      // Log onchain checking details
       this.onchainCheckResult.results.forEach((res) => {
         if (res.error) {
           this.error(`Onchain trigger ${res.triggerIndex}: ${res.error}`);
@@ -144,15 +141,17 @@ class WorkflowProcessor {
 
       if (!this.onchainCheckResult.allTrue) {
         this.log('Onchain trigger conditions not met - workflow skipped');
-        return false;
+        return false; // Stop further processing
       }
       this.log('Onchain triggers satisfied! Proceeding to event triggers');
     }
 
+    // 2. Check event triggers if any exist
     const eventTriggers = meta.workflow.triggers.filter((trigger: Trigger) => trigger.type === TRIGGER_TYPE.EVENT);
     if (eventTriggers.length > 0) {
       this.eventCheckResult = await this.eventMonitor.checkEventTriggers(this.workflow, this.db);
 
+      // Show event checking details
       if (typeof this.eventCheckResult !== 'boolean' && this.eventCheckResult?.results) {
         this.eventCheckResult.results.forEach((result) => {
           if (result.error) {
@@ -167,7 +166,7 @@ class WorkflowProcessor {
 
       if (typeof this.eventCheckResult !== 'boolean' && !this.eventCheckResult.hasEvents) {
         this.log(`No events found - workflow skipped`);
-        return false;
+        return false; // Stop processing here
       }
       this.log(`Events found! Proceeding with simulation`);
     }
@@ -183,27 +182,32 @@ class WorkflowProcessor {
 
       let simulationResult;
 
+      // Check if workflow data is already in meta field (from MongoDB)
       if (this.workflow.meta) {
         simulationResult = await this.workflowSDK.simulateWorkflow(
           this.workflow.meta.workflow,
           this.workflow.ipfs_hash,
         );
       } else {
+        // Load from IPFS and simulate
         const workflowData = await this.workflowSDK.loadWorkflowData(this.workflow.ipfs_hash);
         simulationResult = await this.workflowSDK.simulateWorkflow(
           workflowData,
           this.workflow.ipfs_hash,
         );
 
+        // Store the workflow data in meta for future use
         this.workflow.meta = {
           workflow: workflowData,
           metadata: {
+            // Placeholder for metadata if needed
             createdAt: { $numberLong: Date.now().toString() },
             version: '1.0.0',
           },
         };
       }
 
+      // Check simulation result for AA23 validation error
       if (!simulationResult.success && simulationResult.error) {
         const mockError = { message: simulationResult.error };
         if (this.shouldCancelWorkflow(mockError)) {
@@ -222,8 +226,10 @@ class WorkflowProcessor {
     } catch (error) {
       this.error('Simulation failed', error);
 
+      // Create error response with concise error message
       const errorMessage = this.getErrorSummary(error);
 
+      // Check if this is the specific AA23 error that should cancel the workflow
       if (this.shouldCancelWorkflow(error)) {
         this.log(`Detected AA23 validation error during simulation - marking workflow as cancelled`);
         await this.markWorkflowCancelled(error);
@@ -235,6 +241,7 @@ class WorkflowProcessor {
         };
       }
 
+      // For other errors, just record them but don't cancel
       return {
         success: false,
         error: errorMessage,
@@ -253,6 +260,7 @@ class WorkflowProcessor {
         throw new Error('WorkflowSDK not initialized');
       }
 
+      // Use stored workflow data from meta
       if (!this.workflow.meta) {
         throw new Error('Workflow data not available in meta field');
       }
@@ -262,6 +270,7 @@ class WorkflowProcessor {
         this.workflow.ipfs_hash,
       );
 
+      // Check execution result for AA23 validation error
       if (!executionResult.success && executionResult.error) {
         const mockError = { message: executionResult.error };
         if (this.shouldCancelWorkflow(mockError)) {
@@ -280,8 +289,10 @@ class WorkflowProcessor {
     } catch (error) {
       this.error('Execution failed', error);
 
+      // Create error response with concise error message
       const errorMessage = this.getErrorSummary(error);
 
+      // Check if this is the specific AA23 error that should cancel the workflow
       if (this.shouldCancelWorkflow(error)) {
         this.log(`Detected AA23 validation error - marking workflow as cancelled`);
         await this.markWorkflowCancelled(error);
@@ -293,6 +304,7 @@ class WorkflowProcessor {
         };
       }
 
+      // For other errors, just record them but don't cancel
       return {
         success: false,
         error: errorMessage,
@@ -342,6 +354,7 @@ class WorkflowProcessor {
           : null,
       };
 
+      // Debug: Log what we're storing
       this.log(
         `Storing simulation result - Success: ${lastSimulation.simulation.success}, Error: ${lastSimulation.simulation.error || 'null'}, Cancelled: ${lastSimulation.simulation.cancelled}`,
       );
@@ -384,6 +397,7 @@ class WorkflowProcessor {
   async report(simulationResult: any, executionResult: any = null, triggerResult: any = null): Promise<boolean> {
     this.log(`Reporting for workflow ${this.workflow.getIpfsHashShort()}`);
 
+    // Onchain trigger report
     if (this.onchainCheckResult) {
       this.log('Onchain Triggers:');
       this.onchainCheckResult.results.forEach((res) => {
@@ -399,6 +413,7 @@ class WorkflowProcessor {
       }
     }
 
+    // Report event trigger results if any
     if (triggerResult && this.eventCheckResult && typeof this.eventCheckResult !== 'boolean') {
       this.log(`Event Triggers:`);
       this.eventCheckResult.results.forEach((result) => {
@@ -423,6 +438,7 @@ class WorkflowProcessor {
         this.log(`Simulation: ${simulationResult.success ? 'SUCCESS' : 'FAILED'}`);
       }
 
+      // Submit report to API
       if (simulationResult.results) {
         for (const result of simulationResult.results) {
           if (!result.userOp) {
@@ -494,16 +510,20 @@ class WorkflowProcessor {
   }
 
   private async scheduleNextRun(_simulationResult: any, executionResult: any): Promise<void> {
-    const hasTriggers = this.workflow.triggers && this.workflow.triggers.length > 0;
+    const triggers = this.workflow.triggers;
 
-    if (!hasTriggers) {
-      this.log(`No triggers found. Archiving workflow ${this.workflow.ipfs_hash}.`);
-      await this.db.updateWorkflow(this.workflow.ipfs_hash, { is_archived: true });
+    if (!triggers || triggers.length === 0) {
+      // For workflows without triggers, run once and then disable by setting null
+      await this.db.updateWorkflow(this.workflow.ipfs_hash, { next_simulation_time: null });
+      this.log(`Workflow has no triggers, unscheduled after one-time execution.`);
       return;
     }
 
-    const nextTime = getNextSimulationTime(this.workflow.triggers);
-    if (!nextTime) return;
+    const nextTime = getNextSimulationTime(this.workflow);
+    if (!nextTime) {
+      this.log(`No next simulation time could be determined.`);
+      return;
+    }
 
     let adjusted = nextTime;
     if (executionResult && executionResult.success && !executionResult.skipped) {

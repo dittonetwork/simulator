@@ -40,15 +40,24 @@ export class Database {
 
   async getRelevantWorkflows(): Promise<Workflow[]> {
     const now = new Date();
+    const nowInSeconds = Math.floor(now.getTime() / 1000);
     if (!this.db) throw new Error('Database not connected');
+
     const rawWorkflows = await this.db
       .collection<WorkflowDocument>(COLLECTIONS.WORKFLOWS)
       .find({
         is_cancelled: false,
-        is_archived: { $ne: true },
-        next_simulation_time: { $lte: now },
+        $or: [
+          { next_simulation_time: { $lte: now } },
+          {
+            'meta.workflow.triggers': { $exists: false, $eq: [] },
+            'meta.workflow.validAfter': { $lte: nowInSeconds },
+            'meta.workflow.validUntil': { $gte: nowInSeconds },
+          },
+        ],
       })
       .toArray();
+
     const validWorkflows: Workflow[] = [];
     for (const raw of rawWorkflows) {
       try {
@@ -68,7 +77,6 @@ export class Database {
       .collection<WorkflowDocument>(COLLECTIONS.WORKFLOWS)
       .find({
         is_cancelled: false,
-        is_archived: { $ne: true },
         next_simulation_time: { $exists: false },
       })
       .limit(limit)
