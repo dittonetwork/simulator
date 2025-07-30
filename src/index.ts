@@ -50,7 +50,6 @@ class Simulator {
         while (active < this.maxWorkers && idx < workflows.length) {
           const workflow = workflows[idx++];
           active++;
-          // Resolve correct worker file depending on runtime (ts-node/tsx vs compiled JS)
           const isProd = import.meta.url.endsWith('.js');
           const workerFile = isProd
             ? new URL('worker.js', import.meta.url)
@@ -101,7 +100,9 @@ class Simulator {
 
     for (const workflow of workflows) {
       try {
-        const nextTime = getNextSimulationTime(workflow.triggers);
+        const hasTriggers = workflow.triggers && workflow.triggers.length > 0;
+        const nextTime = hasTriggers ? getNextSimulationTime(workflow.triggers) : new Date();
+
         await this.db.updateWorkflow(workflow.ipfs_hash, { next_simulation_time: nextTime });
         logger.info(`Set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
       } catch (e) {
@@ -112,7 +113,6 @@ class Simulator {
   }
 
   async getCurrentBlockNumbers(chainIds: Set<number>): Promise<void> {
-    // Use cache for same execution cycle, clear cache each cycle
     this.blockNumberCache.clear();
 
     logger.info(`Fetching current block numbers for chains: ${Array.from(chainIds).join(', ')}`);
@@ -140,7 +140,6 @@ class Simulator {
     for (const workflow of workflows) {
       for (const trigger of workflow.triggers) {
         if (trigger.type === TRIGGER_TYPE.EVENT) {
-          // Extract from raw trigger format
           const chainId = (trigger.params as any)?.chainId || CHAIN_IDS.SEPOLIA;
           chainIds.add(chainId);
         }
@@ -155,7 +154,6 @@ class Simulator {
 
     logger.info(`Setting up event triggers for ${workflows.length} workflows...`);
 
-    // Extract all unique chain IDs from all workflows
     const requiredChainIds = this.extractChainsFromTriggers(workflows);
 
     if (requiredChainIds.size === 0) {
@@ -163,10 +161,8 @@ class Simulator {
       return;
     }
 
-    // Fetch current block numbers once for all chains
     await this.getCurrentBlockNumbers(requiredChainIds);
 
-    // Initialize block tracking for each workflow with ALL found chain IDs
     for (const workflow of workflows) {
       try {
         await this.initializeWorkflowEventTracking(workflow);
@@ -180,7 +176,6 @@ class Simulator {
   async ensureBlockTrackingForAll(workflows: Workflow[]): Promise<void> {
     logger.info(`Ensuring block tracking for ${workflows.length} workflows about to be processed...`);
 
-    // Extract all unique chain IDs from event triggers in these workflows
     const requiredChainIds = this.extractChainsFromTriggers(workflows);
 
     if (requiredChainIds.size === 0) {
@@ -188,7 +183,6 @@ class Simulator {
       return;
     }
 
-    // Get current block numbers for required chains (fetch fresh if not cached)
     for (const chainId of requiredChainIds) {
       if (!this.blockNumberCache.has(chainId)) {
         if (!this.supportedChains.includes(chainId)) {
@@ -207,7 +201,6 @@ class Simulator {
       }
     }
 
-    // Initialize block tracking for workflows that need it
     for (const workflow of workflows) {
       try {
         await this.initializeWorkflowEventTracking(workflow);
@@ -222,23 +215,19 @@ class Simulator {
     const blockTracking = workflow.block_tracking || {};
     let hasUpdates = false;
 
-    // Determine chains this workflow actually uses
     const workflowChainIds = this.extractChainsFromTriggers([workflow]);
 
     for (const chainId of workflowChainIds) {
       const chainKey = `chain_${chainId}`;
 
-      // Skip if already initialized
       if (blockTracking[chainKey]) continue;
 
-      // Use cached block number
       const currentBlock = this.blockNumberCache.get(chainId);
       if (!currentBlock) {
         logger.warn(`No cached block number for chain ${chainId}, skipping`);
         continue;
       }
 
-      // Initialize tracking for this chain
       blockTracking[chainKey] = {
         last_processed_block: currentBlock,
         last_updated: new Date(),
@@ -250,7 +239,6 @@ class Simulator {
       );
     }
 
-    // Update workflow if we made changes
     if (hasUpdates) {
       await this.db.updateWorkflow(workflow.ipfs_hash, { block_tracking: blockTracking });
       logger.debug(`Updated block tracking for ${workflow.getIpfsHashShort()}: ${JSON.stringify(blockTracking)}`);
@@ -276,27 +264,22 @@ class Simulator {
           continue;
         }
 
-        // 1. Ensure workflows have next_simulation_time
         const missingNextTime = await this.db.getWorkflowsMissingNextSimulationTime(20);
         if (missingNextTime.length > 0) {
           await this.ensureNextSimTime(missingNextTime);
           await this.ensureEventTriggersSetUp(missingNextTime);
         }
 
-        // 2. Process ready workflows with workers
         const workflows = await this.db.getRelevantWorkflows();
         logger.debug(`Gathered ${workflows.length} workflows for processing.`);
 
-        // 2.5. Ensure block tracking for ALL workflows about to be processed
         if (workflows.length > 0) {
           await this.ensureBlockTrackingForAll(workflows);
 
-          // 2.6. Reload workflows from DB to get updated block tracking
           const workflowHashes = workflows.map((w) => w.ipfs_hash);
           const updatedWorkflows = await this.db.getWorkflowsByHashes(workflowHashes);
           logger.debug(`Reloaded ${updatedWorkflows.length} workflows with updated block tracking.`);
 
-          // Debug: Check if workflows actually have block tracking now
           updatedWorkflows.forEach((w) => {
             const blockTracking = w.block_tracking || {};
             const chainKeys = Object.keys(blockTracking);
@@ -310,7 +293,6 @@ class Simulator {
           await this.processWithWorkers(workflows);
         }
 
-        // 3. Sleep before next cycle
         await new Promise((res) => setTimeout(res, this.sleep));
       }
     } catch (err) {
@@ -321,6 +303,5 @@ class Simulator {
   }
 }
 
-// Entry point
 const simulator = new Simulator();
 simulator.run();

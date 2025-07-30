@@ -45,6 +45,7 @@ export class Database {
       .collection<WorkflowDocument>(COLLECTIONS.WORKFLOWS)
       .find({
         is_cancelled: false,
+        is_archived: { $ne: true },
         next_simulation_time: { $lte: now },
       })
       .toArray();
@@ -67,6 +68,7 @@ export class Database {
       .collection<WorkflowDocument>(COLLECTIONS.WORKFLOWS)
       .find({
         is_cancelled: false,
+        is_archived: { $ne: true },
         next_simulation_time: { $exists: false },
       })
       .limit(limit)
