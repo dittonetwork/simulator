@@ -33,9 +33,9 @@ export function getNextSimulationTime(workflow: Workflow): Date | null {
   const validAfter = workflow.meta?.workflow?.validAfter;
 
   if (!triggers || triggers.length === 0) {
-    if (validAfter) {
-      return new Date(validAfter * 1000);
-    }
+          if (validAfter) {
+        return new Date((validAfter as any as number) * 1000);
+      }
     return null;
   }
 
