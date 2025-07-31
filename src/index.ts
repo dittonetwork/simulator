@@ -101,9 +101,13 @@ class Simulator {
 
     for (const workflow of workflows) {
       try {
-        const nextTime = getNextSimulationTime(workflow.triggers);
+        const nextTime = getNextSimulationTime(workflow);
         await this.db.updateWorkflow(workflow.ipfs_hash, { next_simulation_time: nextTime });
-        logger.info(`Set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
+        if (nextTime) {
+          logger.info(`Set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
+        } else {
+          logger.info(`Workflow ${workflow.getIpfsHashShort()} has no triggers and will run once.`);
+        }
       } catch (e) {
         const err = e as Error;
         logger.warn(`Failed to set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${err.message}`);

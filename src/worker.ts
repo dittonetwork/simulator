@@ -510,8 +510,20 @@ class WorkflowProcessor {
   }
 
   private async scheduleNextRun(_simulationResult: any, executionResult: any): Promise<void> {
-    const nextTime = getNextSimulationTime(this.workflow.triggers);
-    if (!nextTime) return;
+    const triggers = this.workflow.triggers;
+
+    if (!triggers || triggers.length === 0) {
+      // For workflows without triggers, run once and then disable by setting null
+      await this.db.updateWorkflow(this.workflow.ipfs_hash, { next_simulation_time: null });
+      this.log(`Workflow has no triggers, unscheduled after one-time execution.`);
+      return;
+    }
+
+    const nextTime = getNextSimulationTime(this.workflow);
+    if (!nextTime) {
+      this.log(`No next simulation time could be determined.`);
+      return;
+    }
 
     let adjusted = nextTime;
     if (executionResult && executionResult.success && !executionResult.skipped) {
