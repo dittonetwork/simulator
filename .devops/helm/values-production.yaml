@@ -130,4 +130,4 @@ env:
   LOG_PRETTY: "true"
   CHAIN_ID: 11155111
   SKIP_AUTH: "true"
-  IPFS_SERVICE_URL: "https://ipfs-service.develop.dittonetwork.io"
+  IPFS_SERVICE_URL: "https://ipfs-service.dittonetwork.io"
