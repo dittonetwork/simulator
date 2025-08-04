@@ -273,6 +273,7 @@ class Simulator {
 
     try {
       while (true) {
+        logger.info('Checking for unsynced chains');
         const unsyncedChainsCount = await this.db.getUnsyncedChainsCount();
         if (unsyncedChainsCount > 0) {
           logger.info(`${unsyncedChainsCount} chains are not synced. Waiting...`);
@@ -280,8 +281,11 @@ class Simulator {
           continue;
         }
 
+        logger.info('Checking for workflows with missing next_simulation_time');
+
         // 1. Ensure workflows have next_simulation_time
         const missingNextTime = await this.db.getWorkflowsMissingNextSimulationTime(20);
+        logger.info(`Found ${missingNextTime.length} workflows with missing next_simulation_time`);
         if (missingNextTime.length > 0) {
           await this.ensureNextSimTime(missingNextTime);
           await this.ensureEventTriggersSetUp(missingNextTime);
@@ -293,6 +297,7 @@ class Simulator {
 
         // 2.5. Ensure block tracking for ALL workflows about to be processed
         if (workflows.length > 0) {
+          logger.info('Ensuring block tracking for all workflows');
           await this.ensureBlockTrackingForAll(workflows);
 
           // 2.6. Reload workflows from DB to get updated block tracking
@@ -309,6 +314,7 @@ class Simulator {
             );
           });
 
+          logger.info('Processing workflows with workers');
           await this.processWithWorkers(updatedWorkflows);
         } else {
           await this.processWithWorkers(workflows);
