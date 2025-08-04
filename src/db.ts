@@ -77,7 +77,7 @@ export class Database {
       .collection<WorkflowDocument>(COLLECTIONS.WORKFLOWS)
       .find({
         is_cancelled: false,
-        next_simulation_time: { $exists: false },
+        next_simulation_time: null,
       })
       .limit(limit)
       .toArray();
