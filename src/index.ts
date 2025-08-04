@@ -69,11 +69,11 @@ class Simulator {
           );
           worker.on('message', (result) => {
             if (result && result.error) {
-              logger.error('Worker error', {
+              logger.error({
                 workflow: workflow.ipfs_hash,
                 error: result.error.message,
                 stack: result.error.stack,
-              });
+              }, 'Worker error');
             }
           });
           worker.on('error', (err) => {
@@ -81,9 +81,9 @@ class Simulator {
           });
           worker.on('exit', (code) => {
             if (code !== 0) {
-              logger.error(`Worker stopped with exit code ${code}`, {
-                workflow: workflow.ipfs_hash,
-              });
+              logger.error({
+                workflow: workflow.ipfs_hash
+              }, `Worker stopped with exit code ${code}`);
             }
             active--;
             next();
@@ -267,7 +267,7 @@ class Simulator {
     
     setInterval(() => {
       reportingClient.doRefreshToken().catch(err => {
-        logger.error('Failed to refresh token in background', { error: err });
+        logger.error({ error: err }, 'Failed to refresh token in background');
       });
     }, this.tokenRefreshInterval);
 
