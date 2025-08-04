@@ -63,7 +63,12 @@ async function testIntegration() {
 
     simulationResult.results.forEach((result, i) => {
       if (result.gas) {
-        logger.info(`  - Session ${i + 1} gas estimate: ${result.gas.amount} USDC`);
+        logger.info(
+          `  - Session ${i + 1} gas estimate:`,
+          `preVerificationGas: ${result.gas.preVerificationGas},`,
+          `verificationGasLimit: ${result.gas.verificationGasLimit},`,
+          `callGasLimit: ${result.gas.callGasLimit}`
+        );
       }
     });
 
