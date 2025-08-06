@@ -12,7 +12,11 @@ export interface SimulationResult {
     success: boolean;
     userOpHash?: string;
     gas?: {
-      amount: number;
+      preVerificationGas: number;
+      verificationGasLimit: number;
+      callGasLimit: number;
+      paymasterVerificationGasLimit?: number;
+      paymasterPostOpGasLimit?: number;
     };
     error?: string;
   }>;
@@ -97,7 +101,12 @@ export class WorkflowSDKIntegration {
       // Log gas estimates
       result.results.forEach((res: any, i: number) => {
         if (res.gas) {
-          logger.info(`- Session ${i + 1} gas estimate: ${res.gas.amount} USDC`);
+          logger.info(
+            `- Session ${i + 1} gas estimate:`,
+            `preVerificationGas: ${res.gas.preVerificationGas},`,
+            `verificationGasLimit: ${res.gas.verificationGasLimit},`,
+            `callGasLimit: ${res.gas.callGasLimit}`
+          );
         }
       });
 
