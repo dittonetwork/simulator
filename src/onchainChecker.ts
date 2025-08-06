@@ -1,4 +1,5 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
+import { OnchainConditionOperator } from "@ditto/workflow-sdk";
 import { getConfig } from './config.js';
 import { getLogger } from './logger.js';
 import { OnchainTrigger, Workflow } from "@ditto/workflow-sdk";
@@ -47,6 +48,38 @@ export default class OnchainChecker {
     ]) as Promise<T>;
   }
 
+  /**
+   * Evaluate on-chain condition operator against a result value
+   */
+  private evaluateCondition(result: any, operator: OnchainConditionOperator, compareValue: any): boolean {
+    try {
+      switch (operator) {
+        case OnchainConditionOperator.EQUAL:
+          return result === compareValue;
+        case OnchainConditionOperator.NOT_EQUAL:
+          return result !== compareValue;
+        case OnchainConditionOperator.GREATER_THAN:
+          return BigInt(result) > BigInt(compareValue);
+        case OnchainConditionOperator.GREATER_THAN_OR_EQUAL:
+          return BigInt(result) >= BigInt(compareValue);
+        case OnchainConditionOperator.LESS_THAN:
+          return BigInt(result) < BigInt(compareValue);
+        case OnchainConditionOperator.LESS_THAN_OR_EQUAL:
+          return BigInt(result) <= BigInt(compareValue);
+        case OnchainConditionOperator.ONE_OF:
+          if (!Array.isArray(compareValue)) return false;
+          // Приводим к строке, чтобы нивелировать различие number/bigint и другие несовпадения типов
+          return compareValue.map((v: any) => String(v)).includes(String(result));
+        default:
+          return false;
+      }
+    } catch (e) {
+      // If any error occurs during comparison (e.g., BigInt conversion), treat as failed condition
+      this.logger.error({ error: e }, 'Failed to evaluate onchain condition');
+      return false;
+    }
+  }
+
   async checkOnchainTriggers(workflow: Workflow | undefined): Promise<OnchainCheckAggregate> {
     if (!workflow) return { allTrue: true, results: [] };
     const triggers = (workflow.triggers || []).filter((t: any) => t.type === 'onchain') as OnchainTrigger[];
@@ -70,7 +103,9 @@ export default class OnchainChecker {
       let resultVal: any = undefined;
       let errorMsg: string | undefined = undefined;
 
-      const abiItem = parseAbiItem(`function ${trigger.params.abi} view returns (bool)`);
+      // Ensure ABI signature includes a returns clause. If missing, assume boolean return for backward compatibility.
+      const abiSignature = trigger.params.abi.includes('returns') ? trigger.params.abi : `${trigger.params.abi} view returns (bool)`;
+      const abiItem = parseAbiItem(`function ${abiSignature}`);
       const functionName = (abiItem as import('viem').AbiFunction).name;
 
       // Obtain the current block once and use it for a consistent read
@@ -87,8 +122,13 @@ export default class OnchainChecker {
             value: trigger.params.value,
             blockNumber: currentBlockBigInt,
           }));
-          success = res === true;
           resultVal = res;
+          if (trigger.params.onchainCondition) {
+            const { condition, value } = trigger.params.onchainCondition;
+            success = this.evaluateCondition(res, condition as OnchainConditionOperator, value);
+          } else {
+            success = res === true;
+          }
         } catch (e) {
           errorMsg = (e as Error).message;
           this.logger.error({ error: e }, `Onchain trigger ${idx} failed attempt ${attempt + 1}`);
