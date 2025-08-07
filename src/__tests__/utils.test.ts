@@ -6,8 +6,8 @@ describe('serializeIpfs', () => {
     expect(serializeIpfs('')).toBe('');
   });
 
-  it('shortens long hashes', () => {
+  it('returns the full hash', () => {
     const hash = 'Qmabcdef1234567890';
-    expect(serializeIpfs(hash)).toBe('Qmab...7890');
+    expect(serializeIpfs(hash)).toBe(hash);
   });
 });

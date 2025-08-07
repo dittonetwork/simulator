@@ -1,6 +1,6 @@
 export function serializeIpfs(hash: string): string {
   if (!hash) return '';
-  return hash.length <= 8 ? hash : `${hash.slice(0, 4)}...${hash.slice(-4)}`;
+  return hash;
 }
 
 export async function runConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
