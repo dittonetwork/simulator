@@ -57,6 +57,7 @@ class Simulator {
             : new URL('./worker.ts', import.meta.url);
 
           const worker = new Worker(workerFile, {
+            name: `worker-${workflow.ipfs_hash}`,
             workerData: {
               workflow,
               accessToken: reportingClient.getAccessToken(),
