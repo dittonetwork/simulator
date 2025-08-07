@@ -139,7 +139,7 @@ export class EventMonitor {
     const triggers = workflow.triggers || [];
     const eventTriggers = triggers.filter((t: any) => t.type === 'event');
     if (eventTriggers.length === 0) return { hasEvents: true, results: [] };
-    logger.info({ workflow: workflow.getIpfsHashShort(), triggers: eventTriggers.length }, 'checking event triggers');
+    logger.info({ workflow: workflow.ipfs_hash, triggers: eventTriggers.length }, 'checking event triggers');
     const triggersByChain = new Map<number, Array<{ trigger: any; index: number }>>();
     eventTriggers.forEach((trigger: any, index: number) => {
       const chainId = trigger.params?.chainId || Number(Object.keys(cfg.chains)[0]);
@@ -154,7 +154,7 @@ export class EventMonitor {
         const chainKey = `chain_${chainId}`;
         let lastProcessedBlock = workflow.block_tracking?.[chainKey]?.last_processed_block;
         if (!lastProcessedBlock) {
-          logger.warn({ chainId, workflow: workflow.getIpfsHashShort() }, 'block tracking not initialized');
+          logger.warn({ chainId, workflow: workflow.ipfs_hash }, 'block tracking not initialized');
           chainTriggers.forEach(({ trigger, index }) => {
             eventResults.push({ triggerIndex: index, chainId, signature: trigger.params?.signature || 'unknown', error: `Chain ${chainId} block tracking not initialized`, fromBlock: null, toBlock: null, blocksChecked: 0 });
           });
