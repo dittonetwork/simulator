@@ -65,7 +65,7 @@ class Simulator {
             ...(!isProd && { execArgv: ['--loader', 'tsx'] }),
           });
           logger.info(
-            `Spawning worker for ${workflow.getIpfsHashShort()} with token: ${reportingClient.getAccessToken() ? 'present' : 'absent'}`,
+            `Spawning worker for ${workflow.ipfs_hash} with token: ${reportingClient.getAccessToken() ? 'present' : 'absent'}`,
           );
           worker.on('message', (result) => {
             if (result && result.error) {
@@ -104,13 +104,13 @@ class Simulator {
         const nextTime = getNextSimulationTime(workflow);
         await this.db.updateWorkflow(workflow.ipfs_hash, { next_simulation_time: nextTime });
         if (nextTime) {
-          logger.info(`Set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${nextTime.toISOString()}`);
+          logger.info(`Set next_simulation_time for workflow ${workflow.ipfs_hash}: ${nextTime.toISOString()}`);
         } else {
-          logger.info(`Workflow ${workflow.getIpfsHashShort()} has no triggers and will run once.`);
+          logger.info(`Workflow ${workflow.ipfs_hash} has no triggers and will run once.`);
         }
       } catch (e) {
         const err = e as Error;
-        logger.warn(`Failed to set next_simulation_time for workflow ${workflow.getIpfsHashShort()}: ${err.message}`);
+        logger.warn(`Failed to set next_simulation_time for workflow ${workflow.ipfs_hash}: ${err.message}`);
       }
     }
   }
@@ -176,7 +176,7 @@ class Simulator {
         await this.initializeWorkflowEventTracking(workflow);
       } catch (error) {
         const err = error as Error;
-        logger.warn(`Failed to initialize event tracking for workflow ${workflow.getIpfsHashShort()}: ${err.message}`);
+        logger.warn(`Failed to initialize event tracking for workflow ${workflow.ipfs_hash}: ${err.message}`);
       }
     }
   }
@@ -217,7 +217,7 @@ class Simulator {
         await this.initializeWorkflowEventTracking(workflow);
       } catch (error) {
         const err = error as Error;
-        logger.warn(`Failed to initialize event tracking for workflow ${workflow.getIpfsHashShort()}: ${err.message}`);
+        logger.warn(`Failed to initialize event tracking for workflow ${workflow.ipfs_hash}: ${err.message}`);
       }
     }
   }
@@ -250,14 +250,14 @@ class Simulator {
 
       hasUpdates = true;
       logger.info(
-        `Initialized chain ${chainId} tracking for workflow ${workflow.getIpfsHashShort()} at block ${currentBlock}`,
+        `Initialized chain ${chainId} tracking for workflow ${workflow.ipfs_hash} at block ${currentBlock}`,
       );
     }
 
     // Update workflow if we made changes
     if (hasUpdates) {
       await this.db.updateWorkflow(workflow.ipfs_hash, { block_tracking: blockTracking });
-      logger.debug(`Updated block tracking for ${workflow.getIpfsHashShort()}: ${JSON.stringify(blockTracking)}`);
+      logger.debug(`Updated block tracking for ${workflow.ipfs_hash}: ${JSON.stringify(blockTracking)}`);
     }
   }
 
@@ -310,7 +310,7 @@ class Simulator {
             const blockTracking = w.block_tracking || {};
             const chainKeys = Object.keys(blockTracking);
             logger.debug(
-              `Workflow ${w.getIpfsHashShort()} block_tracking: ${chainKeys.length} chains - ${JSON.stringify(blockTracking)}`,
+              `Workflow ${w.ipfs_hash} block_tracking: ${chainKeys.length} chains - ${JSON.stringify(blockTracking)}`,
             );
           });
 

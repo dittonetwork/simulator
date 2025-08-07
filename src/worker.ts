@@ -395,7 +395,7 @@ class WorkflowProcessor {
   }
 
   async report(simulationResult: any, executionResult: any = null, triggerResult: any = null): Promise<boolean> {
-    this.log(`Reporting for workflow ${this.workflow.getIpfsHashShort()}`);
+    this.log(`Reporting for workflow ${this.workflow.ipfs_hash}`);
 
     // Onchain trigger report
     if (this.onchainCheckResult) {

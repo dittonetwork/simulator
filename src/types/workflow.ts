@@ -30,9 +30,5 @@ export class Workflow implements WorkflowDocument {
     return this.meta?.workflow.jobs || [];
   }
 
-  getIpfsHashShort() {
-    const hash = this.ipfs_hash || '';
-    if (hash.length <= 8) return hash;
-    return `${hash.slice(0, 4)}...${hash.slice(-4)}`;
-  }
+
 }
