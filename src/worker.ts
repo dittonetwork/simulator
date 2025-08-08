@@ -217,7 +217,7 @@ class WorkflowProcessor {
             success: false,
             error: this.getErrorSummary(mockError),
             cancelled: true,
-            results: [],
+            results: simulationResult.results || [],
           };
         }
       }
@@ -280,7 +280,7 @@ class WorkflowProcessor {
             success: false,
             error: this.getErrorSummary(mockError),
             cancelled: true,
-            results: [],
+            results: executionResult.results || [],
           };
         }
       }
@@ -477,7 +477,10 @@ class WorkflowProcessor {
       if (executionResult.success && executionResult.results) {
         executionResult.results.forEach((result: any, idx: number) => {
           if (result.userOpHash) {
-            this.log(`  Session ${idx + 1} UserOp: ${result.userOpHash}`);
+            this.log(`  Session ${idx + 1} UserOpHash: ${result.userOpHash}`);
+          }
+          if (result.userOp) {
+            this.log(`  Session ${idx + 1} userOp: ${JSON.stringify(result.userOp, null, 2)}`);
           }
         });
       }
@@ -493,6 +496,7 @@ class WorkflowProcessor {
 
     if (triggerSatisfied) {
       simulationResult = await this.simulate();
+      this.log(`Simulation result: ${JSON.stringify(simulationResult, null, 2)}`);
 
       if (simulationResult && (simulationResult as any).cancelled) {
         await this.report(simulationResult, null, triggerSatisfied);
@@ -501,6 +505,7 @@ class WorkflowProcessor {
 
       if (this.fullNode && simulationResult.success) {
         executionResult = await this.execute(simulationResult);
+        this.log(`Execution result: ${JSON.stringify(executionResult, null, 2)}`);
       }
     }
 
