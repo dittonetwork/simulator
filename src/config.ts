@@ -5,7 +5,7 @@ import { getChainConfig, CHAINS } from '@ditto/workflow-sdk';
 dotenv.config();
 
 export function getConfig() {
-  const chainConfig = getChainConfig();
+  const chainConfig = getChainConfig(process.env.ZERODEV_API_KEY || "");
 
   const schema = z.object({
     mongoUri: z.string().startsWith('mongodb://'),
