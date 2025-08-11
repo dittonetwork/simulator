@@ -58,7 +58,7 @@ class WorkflowProcessor {
     this.eventMonitor = new EventMonitor();
     this.onchainChecker = new OnchainChecker();
     this.workerId = uuidv4();
-    this.logger = getLogger(`Worker-${this.workerId}`);
+    this.logger = getLogger(`Worker-${this.workflow.ipfs_hash}-${this.workerId}`);
     this.eventCheckResult = null;
     this.onchainCheckResult = null;
   }
