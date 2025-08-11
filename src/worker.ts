@@ -12,7 +12,7 @@ import EventMonitor from './eventMonitor.js';
 import OnchainChecker from './onchainChecker.js';
 import { getLogger } from './logger.js';
 import { TRIGGER_TYPE } from './constants.js';
-import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData } from '@ditto/workflow-sdk';
+import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData, Workflow as SDKWorkflow } from '@ditto/workflow-sdk';
 import { reportingClient } from './reportingClient.js';
 import { bigIntToString } from './utils.js';
 
@@ -551,6 +551,9 @@ class WorkflowProcessor {
     try {
       const obj = new Workflow(this.workflow);
       this.workflow = obj;
+      if (this.workflow.meta?.workflow) {
+        this.workflow.meta.workflow = new SDKWorkflow(this.workflow.meta.workflow).typify();
+      }
 
       await this.initializeSDK();
       await this.initializeReportingClient(workerData.accessToken, workerData.refreshToken);
