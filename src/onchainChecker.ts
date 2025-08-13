@@ -68,8 +68,7 @@ export default class OnchainChecker {
           return BigInt(result) <= BigInt(compareValue);
         case OnchainConditionOperator.ONE_OF:
           if (!Array.isArray(compareValue)) return false;
-          // Приводим к строке, чтобы нивелировать различие number/bigint и другие несовпадения типов
-          return compareValue.map((v: any) => String(v)).includes(String(result));
+          return compareValue.map((v: any) => String(v).toLowerCase()).includes(String(result).toLowerCase());
         default:
           return false;
       }
