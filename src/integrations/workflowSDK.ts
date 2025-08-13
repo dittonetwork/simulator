@@ -11,6 +11,7 @@ export interface SimulationResult {
   results: Array<{
     success: boolean;
     userOpHash?: string;
+    userOp?: any;
     gas?: {
       preVerificationGas: number;
       verificationGasLimit: number;
@@ -29,6 +30,7 @@ export interface ExecutionResult {
   results: Array<{
     success: boolean;
     userOpHash?: string;
+    userOp?: any;
     gas?: {
       amount: number;
     };
@@ -109,6 +111,9 @@ export class WorkflowSDKIntegration {
             `callGasLimit: ${res.gas.callGasLimit}`
           );
         }
+        if (res.userOp) {
+            logger.info(`- Session ${i + 1} userOp:`, res.userOp);
+        }
       });
 
       return result as SimulationResult;
@@ -141,7 +146,10 @@ export class WorkflowSDKIntegration {
       // Log transaction hashes
       result.results.forEach((res: any, i: number) => {
         if (res.userOpHash) {
-          logger.info(`- Session ${i + 1} UserOp: ${res.userOpHash}`);
+          logger.info(`- Session ${i + 1} UserOpHash: ${res.userOpHash}`);
+        }
+        if (res.userOp) {
+            logger.info(`- Session ${i + 1} userOp:`, res.userOp);
         }
       });
 
