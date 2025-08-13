@@ -57,7 +57,7 @@ async function testIntegration() {
 
     // Step 3: Test simulation
     logger.info('\n⚡ Step 3: Testing workflow simulation...');
-    const simulationResult = await workflowSDK.simulateWorkflow(workflowData, testIpfsHash);
+    const simulationResult = await workflowSDK.simulateWorkflow(workflowData, testIpfsHash, false, process.env.ZERODEV_API_KEY || "");
     logger.info(`✅ Simulation completed: ${simulationResult.success ? 'SUCCESS' : 'FAILED'}`);
     logger.info(`  - Sessions simulated: ${simulationResult.results.length}`);
 
@@ -75,7 +75,7 @@ async function testIntegration() {
     // Step 4: Test execution (only if simulation successful)
     if (simulationResult.success) {
       logger.info('\n🚀 Step 4: Testing workflow execution...');
-      const executionResult = await workflowSDK.executeWorkflow(workflowData, testIpfsHash);
+      const executionResult = await workflowSDK.executeWorkflow(workflowData, testIpfsHash, false, process.env.ZERODEV_API_KEY || "");
       logger.info(`✅ Execution completed: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
       logger.info(`  - Sessions executed: ${executionResult.results.length}`);
 

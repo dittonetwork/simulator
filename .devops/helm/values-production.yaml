@@ -131,3 +131,4 @@ env:
   CHAIN_ID: 11155111
   SKIP_AUTH: "true"
   IPFS_SERVICE_URL: "https://ipfs-service.dittonetwork.io"
+  IS_PROD: "true"

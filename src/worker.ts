@@ -39,6 +39,10 @@ class WorkflowProcessor {
 
   private onchainCheckResult: { allTrue: boolean; results: any[] } | null;
 
+  private zerodevApiKey: string;
+
+  private isProd: boolean;
+
   private static readonly ERROR_PATTERNS = [
     { regex: /AA23 reverted.*0xc48cf8ee/, summary: 'AA23 validation error: Contract rejected markRun call (0xc48cf8ee)' },
     { regex: /AA23/, summary: 'AA23 validation error' },
@@ -58,9 +62,11 @@ class WorkflowProcessor {
     this.eventMonitor = new EventMonitor();
     this.onchainChecker = new OnchainChecker();
     this.workerId = uuidv4();
-    this.logger = getLogger(`Worker-${this.workerId}`);
+    this.logger = getLogger(`Worker-${this.workflow.ipfs_hash}-${this.workerId}`);
     this.eventCheckResult = null;
     this.onchainCheckResult = null;
+    this.isProd = process.env.IS_PROD === 'true';
+    this.zerodevApiKey = process.env.ZERODEV_API_KEY || '';
   }
 
   log(message: string): void {
@@ -187,6 +193,8 @@ class WorkflowProcessor {
         simulationResult = await this.workflowSDK.simulateWorkflow(
           this.workflow.meta.workflow,
           this.workflow.ipfs_hash,
+          this.isProd,
+          this.zerodevApiKey,
         );
       } else {
         // Load from IPFS and simulate
@@ -194,6 +202,8 @@ class WorkflowProcessor {
         simulationResult = await this.workflowSDK.simulateWorkflow(
           workflowData,
           this.workflow.ipfs_hash,
+          this.isProd,
+          this.zerodevApiKey,
         );
 
         // Store the workflow data in meta for future use
@@ -268,6 +278,8 @@ class WorkflowProcessor {
       const executionResult = await this.workflowSDK.executeWorkflow(
         this.workflow.meta.workflow,
         this.workflow.ipfs_hash,
+        this.isProd,
+        this.zerodevApiKey,
       );
 
       // Check execution result for AA23 validation error

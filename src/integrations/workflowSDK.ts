@@ -83,7 +83,7 @@ export class WorkflowSDKIntegration {
   /**
    * Simulate workflow execution using stored workflow data
    */
-  async simulateWorkflow(_workflowData: Workflow, ipfsHash: string): Promise<SimulationResult> {
+  async simulateWorkflow(_workflowData: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
@@ -92,7 +92,8 @@ export class WorkflowSDKIntegration {
         ipfsHash,
         this.storage,
         executor as any,
-        BigInt(0),
+        prodContract,
+        zerodevApiKey,
         true,
       );
 
@@ -125,7 +126,7 @@ export class WorkflowSDKIntegration {
   /**
    * Execute workflow using stored workflow data
    */
-  async executeWorkflow(_workflowData: Workflow, ipfsHash: string): Promise<ExecutionResult> {
+  async executeWorkflow(_workflowData: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
@@ -133,7 +134,8 @@ export class WorkflowSDKIntegration {
         ipfsHash,
         this.storage,
         executor as any,
-        BigInt(0),
+        prodContract,
+        zerodevApiKey,
         false,
       );
 
@@ -166,7 +168,7 @@ export class WorkflowSDKIntegration {
   /**
    * Combined flow: Load from IPFS, simulate, then execute
    */
-  async processWorkflow(ipfsHash: string): Promise<{
+  async processWorkflow(ipfsHash: string, prodContract: boolean, zerodevApiKey: string): Promise<{
     workflowData: Workflow;
     simulationResult: SimulationResult;
     executionResult?: ExecutionResult;
@@ -177,14 +179,14 @@ export class WorkflowSDKIntegration {
     const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
 
     // Step 2: Simulate
-    const simulationResult = await this.simulateWorkflow(workflowData, ipfsHash);
+    const simulationResult = await this.simulateWorkflow(workflowData, ipfsHash, prodContract, zerodevApiKey);
 
     let executionResult: ExecutionResult | undefined;
 
     // Step 3: Execute if simulation was successful
     if (simulationResult.success) {
       logger.info(`Simulation successful, proceeding with execution`);
-      executionResult = await this.executeWorkflow(workflowData, ipfsHash);
+      executionResult = await this.executeWorkflow(workflowData, ipfsHash, prodContract, zerodevApiKey);
     } else {
       logger.warn(`Simulation failed, skipping execution`);
     }
@@ -233,16 +235,16 @@ export class WorkflowSDKService {
     return this.integration.loadWorkflowFromIpfs(ipfsHash);
   }
 
-  simulateWorkflow(data: Workflow, ipfsHash: string) {
-    return this.integration.simulateWorkflow(data, ipfsHash);
+  simulateWorkflow(data: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string) {
+    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, zerodevApiKey);
   }
 
-  executeWorkflow(data: Workflow, ipfsHash: string) {
-    return this.integration.executeWorkflow(data, ipfsHash);
+  executeWorkflow(data: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string) {
+    return this.integration.executeWorkflow(data, ipfsHash, prodContract, zerodevApiKey);
   }
 
-  processWorkflow(ipfsHash: string) {
-    return this.integration.processWorkflow(ipfsHash);
+  processWorkflow(ipfsHash: string, prodContract: boolean, zerodevApiKey: string) {
+    return this.integration.processWorkflow(ipfsHash, prodContract, zerodevApiKey);
   }
 }
 
