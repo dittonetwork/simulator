@@ -508,7 +508,7 @@ class WorkflowProcessor {
 
     if (triggerSatisfied) {
       simulationResult = await this.simulate();
-      this.log(`Simulation result: ${simulationResult}`);
+      this.log(`Simulation result: ${JSON.stringify(simulationResult, null, 2)}`);
 
       if (simulationResult && (simulationResult as any).cancelled) {
         await this.report(simulationResult, null, triggerSatisfied);
@@ -517,7 +517,7 @@ class WorkflowProcessor {
 
       if (this.fullNode && simulationResult.success) {
         executionResult = await this.execute(simulationResult);
-        this.log(`Execution result: ${executionResult}`);
+        this.log(`Execution result: ${JSON.stringify(executionResult, null, 2)}`);
       }
     }
 
