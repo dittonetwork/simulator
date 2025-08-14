@@ -492,7 +492,7 @@ class WorkflowProcessor {
             this.log(`  Session ${idx + 1} UserOpHash: ${result.userOpHash}`);
           }
           if (result.userOp) {
-            this.log(`  Session ${idx + 1} userOp: ${result.userOp}`);
+            this.log(`  Session ${idx + 1} userOp: ${JSON.stringify(bigIntToString(result.userOp))}`);
           }
         });
       }
@@ -508,7 +508,7 @@ class WorkflowProcessor {
 
     if (triggerSatisfied) {
       simulationResult = await this.simulate();
-      this.log(`Simulation result: ${simulationResult}`);
+      this.log(`Simulation result: ${JSON.stringify(bigIntToString(simulationResult))}`);
 
       if (simulationResult && (simulationResult as any).cancelled) {
         await this.report(simulationResult, null, triggerSatisfied);
@@ -517,7 +517,7 @@ class WorkflowProcessor {
 
       if (this.fullNode && simulationResult.success) {
         executionResult = await this.execute(simulationResult);
-        this.log(`Execution result: ${executionResult}`);
+        this.log(`Execution result: ${JSON.stringify(bigIntToString(executionResult))}`);
       }
     }
 
