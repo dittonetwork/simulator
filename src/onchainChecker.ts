@@ -53,8 +53,34 @@ export default class OnchainChecker {
    */
   private evaluateCondition(result: any, operator: OnchainConditionOperator, compareValue: any): boolean {
     try {
+
       const unify = (v: any) => String(v).toLowerCase();
-      this.logger.info(`condition: ${operator}, result: ${result}, type: ${typeof result}, compareValue: ${compareValue}, type: ${typeof compareValue}`);
+
+      var conditionStr = "";
+      switch (operator) {
+        case OnchainConditionOperator.EQUAL:
+          conditionStr = "EQUAL";
+          break;
+        case OnchainConditionOperator.NOT_EQUAL:
+          conditionStr = "NOT_EQUAL";
+          break;
+        case OnchainConditionOperator.GREATER_THAN:
+          conditionStr = "GREATER_THAN";
+          break;
+        case OnchainConditionOperator.GREATER_THAN_OR_EQUAL:
+          conditionStr = "GREATER_THAN_OR_EQUAL";
+          break;
+        case OnchainConditionOperator.LESS_THAN:
+          conditionStr = "LESS_THAN";
+          break;
+        case OnchainConditionOperator.LESS_THAN_OR_EQUAL:
+          conditionStr = "LESS_THAN_OR_EQUAL";
+          break;
+        case OnchainConditionOperator.ONE_OF:
+          conditionStr = "ONE_OF";
+          break;
+      }
+      this.logger.info(`condition: ${conditionStr}, result: ${result}, type: ${typeof result}, compareValue: ${compareValue}, type: ${typeof compareValue}`);
       switch (operator) {
         case OnchainConditionOperator.EQUAL:
           return unify(result) === unify(compareValue);
@@ -73,6 +99,7 @@ export default class OnchainChecker {
             this.logger.info(`compareValue is not an array: ${compareValue}`);
             return false;
           }
+
           return compareValue.map(unify).includes(unify(result));
         default:
           return false;
