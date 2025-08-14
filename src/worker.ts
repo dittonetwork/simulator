@@ -407,7 +407,7 @@ class WorkflowProcessor {
   }
 
   async report(simulationResult: any, executionResult: any = null, triggerResult: any = null): Promise<boolean> {
-    this.log(`Reporting for workflow ${this.workflow.ipfs_hash}.\nsimulationResult: ${simulationResult}\nexecutionResult: ${executionResult}\ntriggerResult: ${triggerResult}`);
+    this.log(`Reporting for workflow ${this.workflow.ipfs_hash}. simulationResult: ${simulationResult}, executionResult: ${executionResult}, triggerResult: ${triggerResult}`);
 
     // Onchain trigger report
     if (this.onchainCheckResult) {
@@ -508,7 +508,7 @@ class WorkflowProcessor {
 
     if (triggerSatisfied) {
       simulationResult = await this.simulate();
-      this.log(`Simulation result: ${JSON.stringify(simulationResult, null, 2)}`);
+      this.log(`Simulation result: ${simulationResult}`);
 
       if (simulationResult && (simulationResult as any).cancelled) {
         await this.report(simulationResult, null, triggerSatisfied);
@@ -517,7 +517,7 @@ class WorkflowProcessor {
 
       if (this.fullNode && simulationResult.success) {
         executionResult = await this.execute(simulationResult);
-        this.log(`Execution result: ${JSON.stringify(executionResult, null, 2)}`);
+        this.log(`Execution result: ${executionResult}`);
       }
     }
 
