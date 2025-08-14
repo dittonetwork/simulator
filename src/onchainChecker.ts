@@ -53,11 +53,13 @@ export default class OnchainChecker {
    */
   private evaluateCondition(result: any, operator: OnchainConditionOperator, compareValue: any): boolean {
     try {
+      const unify = (v: any) => String(v).toLowerCase();
+      this.logger.info(`condition: ${operator}, result: ${result}, type: ${typeof result}, compareValue: ${compareValue}, type: ${typeof compareValue}`);
       switch (operator) {
         case OnchainConditionOperator.EQUAL:
-          return result === compareValue;
+          return unify(result) === unify(compareValue);
         case OnchainConditionOperator.NOT_EQUAL:
-          return result !== compareValue;
+          return unify(result) !== unify(compareValue);
         case OnchainConditionOperator.GREATER_THAN:
           return BigInt(result) > BigInt(compareValue);
         case OnchainConditionOperator.GREATER_THAN_OR_EQUAL:
@@ -67,8 +69,11 @@ export default class OnchainChecker {
         case OnchainConditionOperator.LESS_THAN_OR_EQUAL:
           return BigInt(result) <= BigInt(compareValue);
         case OnchainConditionOperator.ONE_OF:
-          if (!Array.isArray(compareValue)) return false;
-          return compareValue.map((v: any) => String(v).toLowerCase()).includes(String(result).toLowerCase());
+          if (!Array.isArray(compareValue)) {
+            this.logger.info(`compareValue is not an array: ${compareValue}`);
+            return false;
+          }
+          return compareValue.map(unify).includes(unify(result));
         default:
           return false;
       }
