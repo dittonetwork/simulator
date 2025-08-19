@@ -465,7 +465,7 @@ class WorkflowProcessor {
             chainsBlockNumbers: {
               [chainId]: Number(blockNumber),
             },
-            userOp: bigIntToString(result.userOp),
+            userOp: bigIntToString(result),
           };
     
           try {
