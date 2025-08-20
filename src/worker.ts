@@ -453,9 +453,6 @@ class WorkflowProcessor {
       // Submit report to API
       if (simulationResult.results) {
         for (const result of simulationResult.results) {
-          if (!result.userOp) {
-            continue;
-          }
           const chainId = result.chainId;
           const blockNumber = await this.eventMonitor.getCurrentBlockNumber(chainId);
     
@@ -465,7 +462,7 @@ class WorkflowProcessor {
             chainsBlockNumbers: {
               [chainId]: Number(blockNumber),
             },
-            userOp: bigIntToString(result.userOp),
+            userOp: bigIntToString(result),
           };
     
           try {
