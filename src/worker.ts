@@ -470,7 +470,7 @@ class WorkflowProcessor {
           };
     
           try {
-            await reportingClient.submitReport(report);
+            await reportingClient.submitReport(bigIntToString(report));
           } catch (error) {
             this.error(`Failed to send report for workflow ${this.workflow.ipfs_hash}`, error);
           }
