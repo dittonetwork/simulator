@@ -462,6 +462,7 @@ class WorkflowProcessor {
             chainsBlockNumbers: {
               [chainId]: Number(blockNumber),
             },
+            expected_simulation_start: this.workflow.next_simulation_time?.toISOString() || undefined,
             start: result.start,
             finish: result.finish,
             gas_estimate: result.gas?.totalGasEstimate || undefined,
