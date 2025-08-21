@@ -20,7 +20,11 @@ export interface SimulationResult {
       callGasLimit: number;
       paymasterVerificationGasLimit?: number;
       paymasterPostOpGasLimit?: number;
+      totalGasEstimate: number;
     };
+    chainId: number;
+    start: string;
+    finish: string;
     error?: string;
   }>;
   markRunHash?: string;
