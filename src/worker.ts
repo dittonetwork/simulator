@@ -6,7 +6,7 @@ import { Database } from './db.js';
 import { getNextSimulationTime } from './parsers/cronParser.js';
 import { Workflow } from './types/workflow.js';
 import type { WorkflowDocument } from './types/interfaces.js';
-import { getWorkflowSDKService } from './integrations/workflowSDK.js';
+import { getWorkflowSDKService, SimulationResult } from './integrations/workflowSDK.js';
 import type { WorkflowSDKService } from './integrations/workflowSDK.js';
 import EventMonitor from './eventMonitor.js';
 import OnchainChecker from './onchainChecker.js';
@@ -406,7 +406,7 @@ class WorkflowProcessor {
     }
   }
 
-  async report(simulationResult: any, executionResult: any = null, triggerResult: any = null): Promise<boolean> {
+  async report(simulationResult: SimulationResult | null, executionResult: any = null, triggerResult: any = null): Promise<boolean> {
     this.log(`Reporting for workflow ${this.workflow.ipfs_hash}. simulationResult: ${simulationResult}, executionResult: ${executionResult}, triggerResult: ${triggerResult}`);
 
     // Onchain trigger report
@@ -462,11 +462,16 @@ class WorkflowProcessor {
             chainsBlockNumbers: {
               [chainId]: Number(blockNumber),
             },
+            expected_simulation_start: this.workflow.next_simulation_time?.toISOString() || undefined,
+            start: result.start,
+            finish: result.finish,
+            gas_estimate: result.gas?.totalGasEstimate || undefined,
+            error_code: this.extractErrorCode(result.error),
             userOp: bigIntToString(result),
           };
     
           try {
-            await reportingClient.submitReport(report);
+            await reportingClient.submitReport(bigIntToString(report));
           } catch (error) {
             this.error(`Failed to send report for workflow ${this.workflow.ipfs_hash}`, error);
           }
@@ -495,6 +500,17 @@ class WorkflowProcessor {
       }
     }
     return true;
+  }
+
+  private extractErrorCode(error?: string): string | undefined {
+    if (!error) return undefined;
+    const line = error
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.startsWith('Details: '));
+    if (!line) return undefined;
+    const value = line.slice('Details: '.length).trim();
+    return value || undefined;
   }
 
   private async handleWorkflow() {
