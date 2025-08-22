@@ -195,6 +195,7 @@ class WorkflowProcessor {
           this.workflow.ipfs_hash,
           this.isProd,
           this.zerodevApiKey,
+          this.workflow.runs || 0,
         );
       } else {
         // Load from IPFS and simulate
@@ -204,6 +205,7 @@ class WorkflowProcessor {
           this.workflow.ipfs_hash,
           this.isProd,
           this.zerodevApiKey,
+          this.workflow.runs || 0,
         );
 
         // Store the workflow data in meta for future use
@@ -280,6 +282,7 @@ class WorkflowProcessor {
         this.workflow.ipfs_hash,
         this.isProd,
         this.zerodevApiKey,
+        this.workflow.runs || 0,
       );
 
       // Check execution result for AA23 validation error
