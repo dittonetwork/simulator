@@ -573,6 +573,12 @@ class WorkflowProcessor {
         this.workflow.meta.workflow = new SDKWorkflow(this.workflow.meta.workflow).typify();
       }
 
+      // Skip processing entirely if the workflow is cancelled
+      if (this.workflow.is_cancelled) {
+        this.log('Workflow is cancelled - skipping simulation and execution');
+        return;
+      }
+
       await this.initializeSDK();
       await this.initializeReportingClient(workerData.accessToken, workerData.refreshToken);
 
