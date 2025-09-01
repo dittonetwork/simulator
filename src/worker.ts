@@ -468,6 +468,7 @@ class WorkflowProcessor {
             gas_estimate: result.gas?.totalGasEstimate || undefined,
             error_code: this.extractErrorCode(result.error),
             userOp: bigIntToString(result),
+            next_simulation_time: this.workflow.next_simulation_time?.toISOString() || undefined,
           };
     
           try {
