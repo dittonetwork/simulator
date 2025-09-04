@@ -32,7 +32,7 @@ npm install
 
 # Build simulator
 echo "🔨 Building simulator..."
-npm run build
+npm run build -w @ditto/workflow-sdk
 
 echo ""
 echo "✅ Setup complete! You can now:"
