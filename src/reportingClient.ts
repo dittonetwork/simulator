@@ -107,6 +107,29 @@ class ReportingClient {
     }
   }
 
+  async unregisterOperator(): Promise<void> {
+    try {
+      logger.info('Unregistering operator...');
+      if (!this.accessToken) {
+        logger.warn('No access token present, skipping unregister.');
+        return;
+      }
+      await axios.post(
+        `${this.apiUrl}/operator/unregister`,
+        {},
+        { headers: { Authorization: `Bearer ${this.accessToken}` } },
+      );
+      logger.info('Operator unregistered successfully.');
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 401) {
+        logger.warn('Unauthorized while unregistering operator. Token may already be invalid.');
+        return;
+      }
+      logger.error({ error }, 'Failed to unregister operator');
+    }
+  }
+
   private async request(method: 'get' | 'post' | 'put' | 'delete', endpoint: string, data?: any) {
     const url = `${this.apiUrl}${endpoint}`;
     const maxRetries = 3;
