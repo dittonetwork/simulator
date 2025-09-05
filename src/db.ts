@@ -47,7 +47,7 @@ export class Database {
       .collection<WorkflowDocument>(COLLECTIONS.WORKFLOWS)
       .find({
         is_cancelled: false,
-        $or: [
+        $and: [
           { next_simulation_time: { $lte: now } },
           {
             'meta.workflow.triggers': { $exists: false, $eq: [] },
