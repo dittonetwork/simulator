@@ -338,4 +338,20 @@ class Simulator {
 
 // Entry point
 const simulator = new Simulator();
+
+let isShuttingDown = false;
+async function gracefulShutdown(signal: NodeJS.Signals) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  logger.info({ signal }, 'Received shutdown signal. Unregistering operator...');
+  try {
+    await reportingClient.unregisterOperator();
+  } catch {}
+  // Exit after unregister attempt
+  process.exit(0);
+}
+
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+
 simulator.run();
