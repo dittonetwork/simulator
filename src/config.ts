@@ -17,6 +17,8 @@ export function getConfig() {
     fullNode: z.boolean(),
     maxMissingNextSimLimit: z.number().int().positive(),
     maxBlockRanges: z.record(z.number().int().positive()),
+    buildTag: z.string(),
+    commitHash: z.string(),
   });
 
   const rpcUrls = Object.fromEntries(
@@ -37,6 +39,9 @@ export function getConfig() {
     ]),
   ) as Record<number, number>;
 
+  const buildTag = process.env.BUILD_TAG || 'unset';
+  const commitHash = process.env.COMMIT_HASH || 'unset';
+
   const cfg = {
     mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017',
     dbName: process.env.DB_NAME || 'indexer',
@@ -47,6 +52,8 @@ export function getConfig() {
     fullNode: process.env.FULL_NODE === 'true',
     maxMissingNextSimLimit: parseInt(process.env.MAX_MISSING_NEXT_SIM_LIMIT || '100', 10),
     maxBlockRanges,
+    buildTag,
+    commitHash,
   } as const;
 
   return Object.freeze(schema.parse(cfg));

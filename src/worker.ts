@@ -15,8 +15,11 @@ import { TRIGGER_TYPE } from './constants.js';
 import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData, Workflow as SDKWorkflow } from '@ditto/workflow-sdk';
 import { reportingClient } from './reportingClient.js';
 import { bigIntToString } from './utils.js';
+import { getConfig } from './config.js';
 
 dotenv.config();
+
+const config = getConfig();
 
 class WorkflowProcessor {
   private workflow: Workflow;
@@ -468,6 +471,8 @@ class WorkflowProcessor {
             gas_estimate: result.gas?.totalGasEstimate || undefined,
             error_code: this.extractErrorCode(result.error),
             userOp: bigIntToString(result),
+            buildTag: config.buildTag,
+            commitHash: config.commitHash,
           };
     
           try {
