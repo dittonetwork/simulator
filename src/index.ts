@@ -264,14 +264,8 @@ class Simulator {
 
   async run() {
     await this.db.connect();
-    await reportingClient.initialize();
+    let isSetInterval = false;
     
-    setInterval(() => {
-      reportingClient.doRefreshToken().catch(err => {
-        logger.error({ error: err }, 'Failed to refresh token in background');
-      });
-    }, this.tokenRefreshInterval);
-
     try {
       while (true) {
         logger.info('Checking for unsynced chains');
@@ -280,6 +274,16 @@ class Simulator {
           logger.info(`${unsyncedChainsCount} chains are not synced. Waiting...`);
           await new Promise((res) => setTimeout(res, this.chainSyncCheckInterval));
           continue;
+        }
+
+        await reportingClient.initialize();    
+        if (!isSetInterval) {
+          setInterval(() => {
+          reportingClient.doRefreshToken().catch(err => {
+            logger.error({ error: err }, 'Failed to refresh token in background');
+          });
+          }, this.tokenRefreshInterval);
+          isSetInterval = true;
         }
 
         logger.info('Checking for workflows with missing next_simulation_time');
