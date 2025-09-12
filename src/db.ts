@@ -50,7 +50,6 @@ export class Database {
         $and: [
           { next_simulation_time: { $lte: now } },
           {
-            'meta.workflow.triggers': { $exists: false, $eq: [] },
             'meta.workflow.validAfter': { $lte: nowInSeconds },
             'meta.workflow.validUntil': { $gte: nowInSeconds },
           },
