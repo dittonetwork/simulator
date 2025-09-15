@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
 import { Worker } from 'worker_threads';
+import express from 'express';
+import bodyParser from 'body-parser';
 import { getLogger } from './logger.js';
 import { Database } from './db.js';
 import { getNextSimulationTime } from './parsers/cronParser.js';
@@ -7,6 +9,8 @@ import EventMonitor from './eventMonitor.js';
 import { CHAIN_IDS, TRIGGER_TYPE } from './constants.js';
 import type { Workflow } from './types/workflow.js';
 import { reportingClient } from './reportingClient.js';
+import { getConfig } from './config.js';
+import validateRouter from './validateApi.js';
 
 dotenv.config();
 const logger = getLogger('Simulator');
@@ -338,6 +342,11 @@ class Simulator {
 
 // Entry point
 const simulator = new Simulator();
+const app = express();
+app.use(bodyParser.json());
+app.use(validateRouter);
+
+const { apiOnly, httpPort } = getConfig();
 
 let isShuttingDown = false;
 async function gracefulShutdown(signal: NodeJS.Signals) {
@@ -354,4 +363,12 @@ async function gracefulShutdown(signal: NodeJS.Signals) {
 process.on('SIGINT', gracefulShutdown);
 process.on('SIGTERM', gracefulShutdown);
 
-simulator.run();
+app.listen(httpPort, () => {
+  logger.info(`HTTP server listening on port ${httpPort}`);
+});
+
+if (!apiOnly) {
+  simulator.run();
+} else {
+  logger.info('API_ONLY mode enabled. Simulator loop is not running.');
+}

@@ -17,7 +17,9 @@
         "forceConsistentCasingInFileNames": true,
         "allowSyntheticDefaultImports": true,
         "types": [
-            "node"
+            "node",
+            "express",
+            "body-parser"
         ],
         "baseUrl": ".",
         "paths": {

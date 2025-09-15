@@ -148,6 +148,56 @@ Run integration tests:
 npm run test:integration
 ```
 
+## 📡 Validate Task API
+
+HTTP server exposes a validation endpoint used to pre-approve workflow executions by simulating them via the Workflow SDK.
+
+- Base URL: `http://localhost:${HTTP_PORT}` (default `8080`)
+- Endpoint: `POST /task/validate`
+
+Request body (JSON):
+
+```json
+{
+  "proofOfTask": "<ipfs-hash-or-identifier>",
+  "data": "<encoded callData string>",
+  "taskDefinitionID": 123,
+  "performer": "0x1234abcd5678ef901234abcd5678ef901234abcd",
+  "targetChainId": 11155111
+}
+```
+
+Constraints:
+- `proofOfTask`: required string
+- `data`: required non-empty string (expected to match `userOp.callData` for the target chain)
+- `taskDefinitionID`: uint16 (0…65535)
+- `performer`: EVM address (`0x` + 40 hex chars)
+- `targetChainId`: uint16 (chain to compare results against)
+
+Response (200):
+
+```json
+{ "data": true | false, "error": false, "message": null | string }
+```
+
+- `data=true` means the simulation succeeded and the produced callData exactly matches `data` for the specified `targetChainId`.
+- On validation errors (bad input) the API returns 200 with `error=true` and a descriptive `message`.
+- On unexpected exceptions the API returns 500 with `error=true`.
+
+Example:
+
+```bash
+curl -sS -X POST http://localhost:8080/task/validate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "proofOfTask": "Qm...",
+    "data": "0xabcdef...",
+    "taskDefinitionID": 1,
+    "performer": "0x1234abcd5678ef901234abcd5678ef901234abcd",
+    "targetChainId": 11155111
+  }'
+```
+
 ## 🏃 Running
 
 ### Local Development
@@ -188,6 +238,23 @@ IPFS_SERVICE_URL=https://your-ipfs-service
 RUNNER_NODE_SLEEP=6
 MAX_WORKERS=2
 FULL_NODE=true
+```
+
+Additional variables used by the API and runtime:
+
+```bash
+# HTTP server
+HTTP_PORT=8080
+
+# When enabled, runs only the HTTP API (no simulator loop)
+API_ONLY=true
+
+# ZeroDev & environment for simulation
+ZERODEV_API_KEY=your-zerodev-api-key
+IS_PROD=false
+
+# Per-chain RPC (overrides); falls back to SDK chain config
+# RPC_URL_<CHAIN_ID>=https://...
 ```
 
 ## 🔄 Updating SDK

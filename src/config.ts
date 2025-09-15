@@ -19,6 +19,8 @@ export function getConfig() {
     maxBlockRanges: z.record(z.number().int().positive()),
     buildTag: z.string(),
     commitHash: z.string(),
+    apiOnly: z.boolean(),
+    httpPort: z.number().int().positive(),
   });
 
   const rpcUrls = Object.fromEntries(
@@ -54,6 +56,8 @@ export function getConfig() {
     maxBlockRanges,
     buildTag,
     commitHash,
+    apiOnly: process.env.API_ONLY === 'false',
+    httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
   } as const;
 
   return Object.freeze(schema.parse(cfg));
