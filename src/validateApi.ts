@@ -1,13 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { getLogger } from './logger.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
-import { bigIntToString } from './utils.js';
 
 const logger = getLogger('ValidateAPI');
 const router = Router();
 
 const isProd = process.env.IS_PROD === 'true';
-const zerodevApiKey = process.env.ZERODEV_API_KEY || '';``
+const zerodevApiKey = process.env.ZERODEV_API_KEY || '';
 
 router.post('/task/validate', async (req: Request, res: Response) => {
   try {
@@ -22,6 +21,32 @@ router.post('/task/validate', async (req: Request, res: Response) => {
     if (!proofOfTask || typeof proofOfTask !== 'string') {
       return res.status(200).json({ data: false, error: true, message: 'proofOfTask is required and must be a string' });
     }
+
+    // proofOfTask format: "ipfsHash_nextSimulationTime_chainID"
+    const [ipfsHash, nextSimulationTimeStr, chainIdStr] = String(proofOfTask).split('_');
+    if (!ipfsHash) {
+      return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: missing ipfsHash' });
+    }
+    if (nextSimulationTimeStr === undefined) {
+      return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: missing nextSimulationTime' });
+    }
+    const nextSimulationTime = Number(nextSimulationTimeStr);
+    if (!Number.isInteger(nextSimulationTime) || nextSimulationTime < 0) {
+      return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: nextSimulationTime must be a non-negative integer' });
+    }
+    if (chainIdStr === undefined) {
+      return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: missing chainID' });
+    }
+    const chainIdFromProof = Number(chainIdStr);
+    if (!Number.isInteger(chainIdFromProof) || chainIdFromProof < 0 || chainIdFromProof > 65535) {
+      return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: chainID must be a uint16' });
+    }
+
+    const nextSimulationTimeIso = new Date(nextSimulationTime * 1000).toISOString();
+    logger.info(
+      `Validation request for ipfsHash=${ipfsHash} nextSimulationTime=${nextSimulationTime} (${nextSimulationTimeIso}) chainID=${chainIdFromProof}`
+    );
+    
     if (data === undefined || typeof data !== 'string' || data.length === 0) {
       return res.status(200).json({ data: false, error: true, message: 'data is required and must be a non-empty string' });
     }
@@ -55,11 +80,9 @@ router.post('/task/validate', async (req: Request, res: Response) => {
 
     // TODO check performer in leader election function
 
-    logger.info(`Validation request for proofOfTask=${proofOfTask}`);
-
     const sdk = getWorkflowSDKService();
-    const workflowData = await sdk.loadWorkflowData(proofOfTask);
-    const simulationResult = await sdk.simulateWorkflow(workflowData, proofOfTask, isProd, zerodevApiKey);
+    const workflowData = await sdk.loadWorkflowData(ipfsHash);
+    const simulationResult = await sdk.simulateWorkflow(workflowData, ipfsHash, isProd, zerodevApiKey);
 
     let approved = !!simulationResult?.success;
     if (!approved) {

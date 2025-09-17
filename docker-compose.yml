@@ -1,13 +1,43 @@
-version: '3.8'
 services:
   simulator:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       - MONGO_URI=${MONGO_URI}
       - DB_NAME=${DB_NAME}
       - RUNNER_NODE_SLEEP=${RUNNER_NODE_SLEEP}
       - MAX_WORKERS=${MAX_WORKERS}
       - FULL_NODE=${FULL_NODE}
+      - API_ONLY=${API_ONLY}
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
     volumes:
       - .:/app
-    command: ["node", "src/index.js"] 
+    command: ["npm", "run", "start"] 
+
+  othnode:
+    build:
+      context: .
+      dockerfile: Dockerfile.othnode
+    env_file:
+      - .env
+    command: [
+      "run",
+      "attester",
+      "/dnsaddr/localhost/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "simulator",
+      "--avs-webapi-port",
+      "8080",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - L1_CHAIN=${L1_CHAIN}
+      - L2_CHAIN=${L2_CHAIN}
+      - L1_RPC=${L1_RPC}
+    depends_on:
+      simulator:
+        condition: service_started
