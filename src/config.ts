@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import dotenv, { config } from 'dotenv';
 import { z } from 'zod';
 
 import { getChainConfig, CHAINS } from '@ditto/workflow-sdk';
@@ -15,12 +15,16 @@ export function getConfig() {
     maxWorkers: z.number().int().positive(),
     runnerSleepMs: z.number().int().positive(),
     fullNode: z.boolean(),
+    executorPrivateKey: z.string(),
+    executorAddress: z.string(),
     maxMissingNextSimLimit: z.number().int().positive(),
     maxBlockRanges: z.record(z.number().int().positive()),
     buildTag: z.string(),
     commitHash: z.string(),
     apiOnly: z.boolean(),
     httpPort: z.number().int().positive(),
+    aggregatorURL: z.string(),
+    othenticFlow: z.boolean(),
   });
 
   const rpcUrls = Object.fromEntries(
@@ -52,12 +56,16 @@ export function getConfig() {
     maxWorkers: parseInt(process.env.MAX_WORKERS || '4', 10),
     runnerSleepMs: parseInt(process.env.RUNNER_NODE_SLEEP || '60', 10) * 1000,
     fullNode: process.env.FULL_NODE === 'true',
+    executorPrivateKey: process.env.EXECUTOR_PRIVATE_KEY || '',
+    executorAddress: process.env.EXECUTOR_ADDRESS || '',
+    othenticFlow: process.env.OTHENTIC_FLOW === 'true',
     maxMissingNextSimLimit: parseInt(process.env.MAX_MISSING_NEXT_SIM_LIMIT || '100', 10),
     maxBlockRanges,
     buildTag,
     commitHash,
     apiOnly: process.env.API_ONLY === 'false',
     httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
+    aggregatorURL: process.env.AGGREGATOR_URL || 'http://localhost:8080',
   } as const;
   return Object.freeze(schema.parse(cfg));
 }
