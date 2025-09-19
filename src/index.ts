@@ -281,7 +281,6 @@ class Simulator {
         }
 
         await reportingClient.initialize();
-        // Ensure on-chain/public clients include Authorization
         try {
           this.eventMonitor.updateAccessToken(reportingClient.getAccessToken() || undefined);
         } catch {}

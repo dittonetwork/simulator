@@ -1,4 +1,5 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
+import { authHttpConfig } from './utils/httpTransport.js';
 import { getConfig } from './config.js';
 import { getLogger } from './logger.js';
 import type { Workflow as BaseWorkflow } from "./types/workflow.js";
@@ -37,12 +38,9 @@ export class EventMonitor {
       const chainId = Number(chainIdStr);
       const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
       if (rpcUrl) {
-        const auth = this.accessToken
-          ? { fetchOptions: { headers: { Authorization: `Bearer ${this.accessToken}` } } }
-          : undefined;
         this.clients.set(
           chainId,
-          createPublicClient({ chain: chainObj as any, transport: http(rpcUrl, auth) }) as any,
+          createPublicClient({ chain: chainObj as any, transport: http(rpcUrl, authHttpConfig(this.accessToken)) }) as any,
         );
       }
     });

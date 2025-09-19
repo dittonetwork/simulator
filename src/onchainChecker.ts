@@ -1,4 +1,5 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
+import { authHttpConfig } from './utils/httpTransport.js';
 import { OnchainConditionOperator } from "@ditto/workflow-sdk";
 import { getConfig } from './config.js';
 import { getLogger } from './logger.js';
@@ -34,10 +35,7 @@ export default class OnchainChecker {
       const chainId = Number(chainIdStr);
       const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
       if (rpcUrl) {
-        const auth = this.accessToken
-          ? { fetchOptions: { headers: { Authorization: `Bearer ${this.accessToken}` } } }
-          : undefined;
-        this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl, auth) }));
+        this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl, authHttpConfig(this.accessToken)) }));
       }
     });
 
@@ -56,10 +54,7 @@ export default class OnchainChecker {
         const chainId = Number(chainIdStr);
         const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
         if (rpcUrl) {
-          const auth = this.accessToken
-            ? { fetchOptions: { headers: { Authorization: `Bearer ${this.accessToken}` } } }
-            : undefined;
-          this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl, auth) }));
+          this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl, authHttpConfig(this.accessToken)) }));
         }
       });
     }

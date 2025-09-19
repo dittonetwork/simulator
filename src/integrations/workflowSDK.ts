@@ -75,7 +75,6 @@ export class WorkflowSDKIntegration {
   async loadWorkflowFromIpfs(ipfsHash: string): Promise<Workflow> {
     logger.info(`Loading workflow data from IPFS: ${ipfsHash}`);
     try {
-      // Access token is handled for RPC transports inside SDK; IPFS storage remains unauthenticated.
       const workflowData = await deserialize(await this.storage.download(ipfsHash));
       logger.info(`Successfully loaded workflow data`);
       logger.info(`- Owner: ${workflowData.owner}`);
@@ -100,7 +99,6 @@ export class WorkflowSDKIntegration {
   ): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
-      // Access token is handled for RPC transports inside SDK; IPFS storage remains unauthenticated.
       let executor: Signer;
       if (this.config.executorAddress != "") {
         logger.info(`Using executor address: ${this.config.executorAddress}`);
@@ -160,7 +158,6 @@ export class WorkflowSDKIntegration {
   ): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
-      // Access token is handled for RPC transports inside SDK; IPFS storage remains unauthenticated.
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
       const result = await executeFromIpfs(
         ipfsHash,
