@@ -90,7 +90,13 @@ export class WorkflowSDKIntegration {
   /**
    * Simulate workflow execution using stored workflow data
    */
-  async simulateWorkflow(_workflowData: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string): Promise<SimulationResult> {
+  async simulateWorkflow(
+    _workflowData: Workflow,
+    ipfsHash: string,
+    prodContract: boolean,
+    ipfsServiceUrl: string,
+    accessToken?: string,
+  ): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
       let executor: Signer;
@@ -108,8 +114,10 @@ export class WorkflowSDKIntegration {
         this.storage,
         executor,
         prodContract,
-        zerodevApiKey,
+        ipfsServiceUrl,
         true,
+        false,
+        accessToken,
       );
 
       logger.info(`Simulation completed successfully`);
@@ -141,7 +149,13 @@ export class WorkflowSDKIntegration {
   /**
    * Execute workflow using stored workflow data
    */
-  async executeWorkflow(_workflowData: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string): Promise<ExecutionResult> {
+  async executeWorkflow(
+    _workflowData: Workflow,
+    ipfsHash: string,
+    prodContract: boolean,
+    ipfsServiceUrl: string,
+    accessToken?: string,
+  ): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
@@ -150,8 +164,10 @@ export class WorkflowSDKIntegration {
         this.storage,
         executor,
         prodContract,
-        zerodevApiKey,
+        ipfsServiceUrl,
         false,
+        false,
+        accessToken,
       );
 
       logger.info(`Execution completed successfully`);
@@ -183,7 +199,12 @@ export class WorkflowSDKIntegration {
   /**
    * Combined flow: Load from IPFS, simulate, then execute
    */
-  async processWorkflow(ipfsHash: string, prodContract: boolean, zerodevApiKey: string): Promise<{
+  async processWorkflow(
+    ipfsHash: string,
+    prodContract: boolean,
+    ipfsServiceUrl: string,
+    accessToken?: string,
+  ): Promise<{
     workflowData: Workflow;
     simulationResult: SimulationResult;
     executionResult?: ExecutionResult;
@@ -194,14 +215,26 @@ export class WorkflowSDKIntegration {
     const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
 
     // Step 2: Simulate
-    const simulationResult = await this.simulateWorkflow(workflowData, ipfsHash, prodContract, zerodevApiKey);
+    const simulationResult = await this.simulateWorkflow(
+      workflowData,
+      ipfsHash,
+      prodContract,
+      ipfsServiceUrl,
+      accessToken,
+    );
 
     let executionResult: ExecutionResult | undefined;
 
     // Step 3: Execute if simulation was successful
     if (simulationResult.success) {
       logger.info(`Simulation successful, proceeding with execution`);
-      executionResult = await this.executeWorkflow(workflowData, ipfsHash, prodContract, zerodevApiKey);
+      executionResult = await this.executeWorkflow(
+        workflowData,
+        ipfsHash,
+        prodContract,
+        ipfsServiceUrl,
+        accessToken,
+      );
     } else {
       logger.warn(`Simulation failed, skipping execution`);
     }
@@ -252,16 +285,28 @@ export class WorkflowSDKService {
     return this.integration.loadWorkflowFromIpfs(ipfsHash);
   }
 
-  simulateWorkflow(data: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string) {
-    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, zerodevApiKey);
+  simulateWorkflow(
+    data: Workflow,
+    ipfsHash: string,
+    prodContract: boolean,
+    ipfsServiceUrl: string,
+    accessToken?: string,
+  ) {
+    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken);
   }
 
-  executeWorkflow(data: Workflow, ipfsHash: string, prodContract: boolean, zerodevApiKey: string) {
-    return this.integration.executeWorkflow(data, ipfsHash, prodContract, zerodevApiKey);
+  executeWorkflow(
+    data: Workflow,
+    ipfsHash: string,
+    prodContract: boolean,
+    ipfsServiceUrl: string,
+    accessToken?: string,
+  ) {
+    return this.integration.executeWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken);
   }
 
-  processWorkflow(ipfsHash: string, prodContract: boolean, zerodevApiKey: string) {
-    return this.integration.processWorkflow(ipfsHash, prodContract, zerodevApiKey);
+  processWorkflow(ipfsHash: string, prodContract: boolean, ipfsServiceUrl: string) {
+    return this.integration.processWorkflow(ipfsHash, prodContract, ipfsServiceUrl);
   }
 }
 

@@ -250,7 +250,7 @@ HTTP_PORT=8080
 API_ONLY=true
 
 # ZeroDev & environment for simulation
-ZERODEV_API_KEY=your-zerodev-api-key
+IPFS_SERVICE_URL=your-zerodev-api-key
 IS_PROD=false
 
 # Per-chain RPC (overrides); falls back to SDK chain config

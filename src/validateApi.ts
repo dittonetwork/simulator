@@ -1,12 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { getLogger } from './logger.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
+import { reportingClient } from './reportingClient.js';
+import { bigIntToString } from './utils.js';
 
 const logger = getLogger('ValidateAPI');
 const router = Router();
 
 const isProd = process.env.IS_PROD === 'true';
-const zerodevApiKey = process.env.ZERODEV_API_KEY || '';
+const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
 
 router.post('/task/validate', async (req: Request, res: Response) => {
   try {
@@ -81,8 +83,17 @@ router.post('/task/validate', async (req: Request, res: Response) => {
     // TODO check performer in leader election function
 
     const sdk = getWorkflowSDKService();
+    // Ensure we have an access token and pass it through
+    await reportingClient.initialize();
+    const accessToken = reportingClient.getAccessToken();
     const workflowData = await sdk.loadWorkflowData(ipfsHash);
-    const simulationResult = await sdk.simulateWorkflow(workflowData, ipfsHash, isProd, zerodevApiKey);
+    const simulationResult = await sdk.simulateWorkflow(
+      workflowData,
+      ipfsHash,
+      isProd,
+      ipfsServiceUrl,
+      accessToken || undefined,
+    );
 
     let approved = !!simulationResult?.success;
     if (!approved) {

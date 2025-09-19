@@ -1,4 +1,5 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
+import { authHttpConfig } from './utils/httpTransport.js';
 import { OnchainConditionOperator } from "@ditto/workflow-sdk";
 import { getConfig } from './config.js';
 import { getLogger } from './logger.js';
@@ -26,6 +27,7 @@ export default class OnchainChecker {
   private timeoutMs: number;
   private retries: number;
   private logger = getLogger('OnchainChecker');
+  private accessToken?: string;
 
   constructor() {
     const cfg = getConfig();
@@ -33,12 +35,29 @@ export default class OnchainChecker {
       const chainId = Number(chainIdStr);
       const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
       if (rpcUrl) {
-        this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl) }));
+        this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl, authHttpConfig(this.accessToken)) }));
       }
     });
 
     this.timeoutMs = parseInt(process.env.ONCHAIN_TIMEOUT_MS || '5000', 10);
     this.retries = parseInt(process.env.ONCHAIN_RETRIES || '1', 10);
+  }
+
+  updateAccessToken(token?: string) {
+    const prev = this.accessToken;
+    this.accessToken = token || undefined;
+    if (prev !== this.accessToken) {
+      // Recreate clients with new header
+      this.clients = new Map();
+      const cfg = getConfig();
+      Object.entries(cfg.chains).forEach(([chainIdStr, chainObj]) => {
+        const chainId = Number(chainIdStr);
+        const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
+        if (rpcUrl) {
+          this.clients.set(chainId, createPublicClient({ chain: chainObj, transport: http(rpcUrl, authHttpConfig(this.accessToken)) }));
+        }
+      });
+    }
   }
 
   private async callWithTimeout<T>(fn: () => Promise<T>): Promise<T> {

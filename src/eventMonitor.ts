@@ -1,4 +1,5 @@
 import { createPublicClient, http, parseAbiItem } from 'viem';
+import { authHttpConfig } from './utils/httpTransport.js';
 import { getConfig } from './config.js';
 import { getLogger } from './logger.js';
 import type { Workflow as BaseWorkflow } from "./types/workflow.js";
@@ -17,6 +18,7 @@ type EventConfig = {
 export class EventMonitor {
   private clients: Map<number, any>;
   private maxBlockRanges: Map<number, number>;
+  private accessToken?: string;
 
   constructor() {
     this.clients = new Map();
@@ -36,9 +38,22 @@ export class EventMonitor {
       const chainId = Number(chainIdStr);
       const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
       if (rpcUrl) {
-        this.clients.set(chainId, createPublicClient({ chain: chainObj as any, transport: http(rpcUrl) }) as any);
+        this.clients.set(
+          chainId,
+          createPublicClient({ chain: chainObj as any, transport: http(rpcUrl, authHttpConfig(this.accessToken)) }) as any,
+        );
       }
     });
+  }
+
+  updateAccessToken(token?: string) {
+    const prev = this.accessToken;
+    this.accessToken = token || undefined;
+    // Recreate clients only if changed
+    if (prev !== this.accessToken) {
+      this.clients = new Map();
+      this.setupClients();
+    }
   }
 
   async getCurrentBlockNumber(chainId: number): Promise<number> {
