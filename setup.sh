@@ -8,13 +8,11 @@ echo "=============================================="
 if [ -d "ditto-workflow-sdk" ]; then
     echo "📂 SDK directory already exists. Updating..."
     cd ditto-workflow-sdk
-    git pull origin zerodev-approach-improved
+    git pull origin master
     cd ..
 else
     echo "📥 Cloning WorkflowSDK repository..."
-    git clone https://github.com/mukhametgalin/ditto-workflow-sdk.git
-    cd ditto-workflow-sdk
-    git checkout zerodev-approach-improved
+    git clone https://github.com/dittonetwork/ditto-workflow-sdk.git
     cd ..
 fi
 
