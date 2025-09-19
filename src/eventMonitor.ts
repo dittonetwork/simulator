@@ -17,6 +17,7 @@ type EventConfig = {
 export class EventMonitor {
   private clients: Map<number, any>;
   private maxBlockRanges: Map<number, number>;
+  private accessToken?: string;
 
   constructor() {
     this.clients = new Map();
@@ -36,9 +37,25 @@ export class EventMonitor {
       const chainId = Number(chainIdStr);
       const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
       if (rpcUrl) {
-        this.clients.set(chainId, createPublicClient({ chain: chainObj as any, transport: http(rpcUrl) }) as any);
+        const auth = this.accessToken
+          ? { fetchOptions: { headers: { Authorization: `Bearer ${this.accessToken}` } } }
+          : undefined;
+        this.clients.set(
+          chainId,
+          createPublicClient({ chain: chainObj as any, transport: http(rpcUrl, auth) }) as any,
+        );
       }
     });
+  }
+
+  updateAccessToken(token?: string) {
+    const prev = this.accessToken;
+    this.accessToken = token || undefined;
+    // Recreate clients only if changed
+    if (prev !== this.accessToken) {
+      this.clients = new Map();
+      this.setupClients();
+    }
   }
 
   async getCurrentBlockNumber(chainId: number): Promise<number> {

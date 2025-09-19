@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import logger from './logger.js';
 import { Database } from './db.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
+import { reportingClient } from './reportingClient.js';
 
 dotenv.config();
 
@@ -55,9 +56,19 @@ async function testIntegration() {
     logger.info(`  - Owner: ${workflowData.owner}`);
     logger.info(`  - Jobs: ${workflowData.jobs.length}`);
 
+    // Ensure access token is available
+    await reportingClient.initialize();
+    const accessToken = reportingClient.getAccessToken();
+
     // Step 3: Test simulation
     logger.info('\n⚡ Step 3: Testing workflow simulation...');
-    const simulationResult = await workflowSDK.simulateWorkflow(workflowData, testIpfsHash, false, process.env.ZERODEV_API_KEY || "");
+    const simulationResult = await workflowSDK.simulateWorkflow(
+      workflowData,
+      testIpfsHash,
+      false,
+      process.env.IPFS_SERVICE_URL || "",
+      accessToken || undefined,
+    );
     logger.info(`✅ Simulation completed: ${simulationResult.success ? 'SUCCESS' : 'FAILED'}`);
     logger.info(`  - Sessions simulated: ${simulationResult.results.length}`);
 
@@ -75,7 +86,13 @@ async function testIntegration() {
     // Step 4: Test execution (only if simulation successful)
     if (simulationResult.success) {
       logger.info('\n🚀 Step 4: Testing workflow execution...');
-      const executionResult = await workflowSDK.executeWorkflow(workflowData, testIpfsHash, false, process.env.ZERODEV_API_KEY || "");
+      const executionResult = await workflowSDK.executeWorkflow(
+        workflowData,
+        testIpfsHash,
+        false,
+        process.env.IPFS_SERVICE_URL || "",
+        accessToken || undefined,
+      );
       logger.info(`✅ Execution completed: ${executionResult.success ? 'SUCCESS' : 'FAILED'}`);
       logger.info(`  - Sessions executed: ${executionResult.results.length}`);
 

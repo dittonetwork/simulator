@@ -5,7 +5,7 @@ import { getChainConfig, CHAINS } from '@ditto/workflow-sdk';
 dotenv.config();
 
 export function getConfig() {
-  const chainConfig = getChainConfig(process.env.ZERODEV_API_KEY || "");
+  const chainConfig = getChainConfig(process.env.IPFS_SERVICE_URL || "");
 
   const schema = z.object({
     mongoUri: z.string().startsWith('mongodb://'),
@@ -59,6 +59,6 @@ export function getConfig() {
     apiOnly: process.env.API_ONLY === 'false',
     httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
   } as const;
-
+  console.log('cfg', cfg);
   return Object.freeze(schema.parse(cfg));
 }

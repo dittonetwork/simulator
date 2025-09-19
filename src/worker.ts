@@ -42,7 +42,7 @@ class WorkflowProcessor {
 
   private onchainCheckResult: { allTrue: boolean; results: any[] } | null;
 
-  private zerodevApiKey: string;
+  private ipfsServiceUrl: string;
 
   private isProd: boolean;
 
@@ -69,7 +69,7 @@ class WorkflowProcessor {
     this.eventCheckResult = null;
     this.onchainCheckResult = null;
     this.isProd = process.env.IS_PROD === 'true';
-    this.zerodevApiKey = process.env.ZERODEV_API_KEY || '';
+    this.ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
   }
 
   log(message: string): void {
@@ -87,6 +87,13 @@ class WorkflowProcessor {
       reportingClient.setTokens(accessToken, refreshToken);
     }
     await reportingClient.initialize();
+    // Ensure dependent clients use the latest access token
+    try {
+      this.eventMonitor.updateAccessToken(reportingClient.getAccessToken() || undefined);
+    } catch {}
+    try {
+      this.onchainChecker.updateAccessToken(reportingClient.getAccessToken() || undefined);
+    } catch {}
   }
 
   async initializeSDK() {
@@ -197,16 +204,20 @@ class WorkflowProcessor {
           this.workflow.meta.workflow,
           this.workflow.ipfs_hash,
           this.isProd,
-          this.zerodevApiKey,
+          this.ipfsServiceUrl,
+          reportingClient.getAccessToken() || undefined,
         );
       } else {
         // Load from IPFS and simulate
-        const workflowData = await this.workflowSDK.loadWorkflowData(this.workflow.ipfs_hash);
+        const workflowData = await this.workflowSDK.loadWorkflowData(
+          this.workflow.ipfs_hash
+        );
         simulationResult = await this.workflowSDK.simulateWorkflow(
           workflowData,
           this.workflow.ipfs_hash,
           this.isProd,
-          this.zerodevApiKey,
+          this.ipfsServiceUrl,
+          reportingClient.getAccessToken() || undefined,
         );
 
         // Store the workflow data in meta for future use
@@ -282,7 +293,8 @@ class WorkflowProcessor {
         this.workflow.meta.workflow,
         this.workflow.ipfs_hash,
         this.isProd,
-        this.zerodevApiKey,
+        this.ipfsServiceUrl,
+        reportingClient.getAccessToken() || undefined,
       );
 
       // Check execution result for AA23 validation error

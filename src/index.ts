@@ -280,7 +280,11 @@ class Simulator {
           continue;
         }
 
-        await reportingClient.initialize();    
+        await reportingClient.initialize();
+        // Ensure on-chain/public clients include Authorization
+        try {
+          this.eventMonitor.updateAccessToken(reportingClient.getAccessToken() || undefined);
+        } catch {}
         if (!isSetInterval) {
           setInterval(() => {
           reportingClient.doRefreshToken().catch(err => {
