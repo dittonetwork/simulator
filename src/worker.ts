@@ -16,6 +16,9 @@ import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData,
 import { reportingClient } from './reportingClient.js';
 import { bigIntToString } from './utils.js';
 import { getConfig } from './config.js';
+import { keccak256, encodeAbiParameters } from 'viem';
+import { stringToHex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
 dotenv.config();
 
@@ -277,6 +280,11 @@ class WorkflowProcessor {
   async execute(simulationResult: any): Promise<any> {
     if (!simulationResult.success) {
       return { success: false, skipped: true, reason: 'simulation_failed' };
+    }
+
+    if (config.othenticFlow) {
+      this.log('OTHENTIC FLOW enabled - executing via executeOthentic');
+      return this.executeOthentic(simulationResult);
     }
 
     try {
@@ -594,15 +602,72 @@ class WorkflowProcessor {
       await this.initializeReportingClient(workerData.accessToken, workerData.refreshToken);
 
       const { simulationResult, executionResult, cancelled } = await this.handleWorkflow();
-
       if (!cancelled) {
         await this.storeLastSimulationResult(simulationResult, executionResult);
-
         await this.scheduleNextRun(simulationResult, executionResult);
       }
     } finally {
       await this.db.close();
     }
+  }
+
+  private async executeOthentic(simulationResult: any): Promise<any> {
+    for (const result of simulationResult.results as any[]) {
+      const proofOfTask = `${this.workflow.ipfs_hash}_${result.nextSimulationTime}_${result.chainId}`;
+      const data = result.userOp.callData.toString();
+      const taskDefinitionId = 0;
+      const performerAddress = config.executorAddress;
+      const targetChainId = result.chainId;
+      const dataHex = stringToHex(data) as `0x${string}`;
+      const encoded = encodeAbiParameters(
+        [
+          { name: 'proofOfTask', type: 'string' },
+          { name: 'data', type: 'bytes' },
+          { name: 'performer', type: 'address' },
+          { name: 'taskDefinitionId', type: 'uint16' },
+        ],
+        [proofOfTask, dataHex, performerAddress as `0x${string}`, taskDefinitionId]
+      );
+      const messageHash = keccak256(encoded);
+
+      let signature: `0x${string}`;
+      try {
+        const pk = (process.env.EXECUTOR_PRIVATE_KEY || config.executorPrivateKey || '').trim();
+        if (!pk) throw new Error('Missing EXECUTOR_PRIVATE_KEY');
+        const account = privateKeyToAccount(pk as `0x${string}`);
+        signature = await account.sign({ hash: messageHash });
+        this.log(`Othentic signature built for chain ${targetChainId}: ${signature}`);
+      } catch (e) {
+        this.error('Failed to sign messageHash for Othentic flow', e);
+        return { success: false, skipped: true, reason: `failed_to_sign_message_hash ${e}` };
+      }
+
+      const response = await fetch(`${config.aggregatorURL}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'sendTask',
+          params: [
+            proofOfTask,
+            data,
+            taskDefinitionId,
+            performerAddress,
+            signature,
+            'ecdsa',
+            targetChainId,
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        this.error(`Failed to send task to aggregator for chain ${targetChainId}`, response);
+        return { success: false, skipped: true, reason: `failed_to_send_task_to_aggregator ${response.statusText}` };
+      }
+
+    }
+
+    return { success: true, skipped: false, reason: 'othentic_flow_executed' };
   }
 }
 

@@ -14,8 +14,6 @@ services:
       - .env
     ports:
       - "8080:8080"
-    volumes:
-      - .:/app
     command: ["npm", "run", "start"] 
 
   othnode:
@@ -27,7 +25,7 @@ services:
     command: [
       "run",
       "attester",
-      "/dnsaddr/localhost/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "/dns4/aggregator.develop.dittonetwork.io/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
       "--avs-webapi",
       "simulator",
       "--avs-webapi-port",

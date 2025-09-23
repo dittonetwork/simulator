@@ -50,6 +50,10 @@ See `env.example` for the full list. Key values:
 MONGO_URI=mongodb://localhost:27017
 DB_NAME=indexer
 RPC_URL=https://rpc.ankr.com/eth_sepolia
+EXECUTOR_PRIVATE_KEY=0x...
+EXECUTOR_ADDRESS=0x...
+AGGREGATOR_URL=http://localhost:8080
+OTHENTIC_FLOW=false
 FULL_NODE=false
 MAX_WORKERS=4
 RUNNER_NODE_SLEEP=60
@@ -159,7 +163,7 @@ Request body (JSON):
 
 ```json
 {
-  "proofOfTask": "<ipfs-hash-or-identifier>",
+  "proofOfTask": "<ipfsHash_nextSimulationTime_chainId>",
   "data": "<encoded callData string>",
   "taskDefinitionID": 123,
   "performer": "0x1234abcd5678ef901234abcd5678ef901234abcd",
@@ -168,7 +172,7 @@ Request body (JSON):
 ```
 
 Constraints:
-- `proofOfTask`: required string
+- `proofOfTask`: required string, format `ipfsHash_nextSimulationTime_chainID`
 - `data`: required non-empty string (expected to match `userOp.callData` for the target chain)
 - `taskDefinitionID`: uint16 (0…65535)
 - `performer`: EVM address (`0x` + 40 hex chars)
@@ -256,6 +260,36 @@ IS_PROD=false
 # Per-chain RPC (overrides); falls back to SDK chain config
 # RPC_URL_<CHAIN_ID>=https://...
 ```
+
+## 🧩 Othentic Flow
+
+When `OTHENTIC_FLOW=true`, execution switches to an aggregator JSON-RPC call with ECDSA signing of a message hash built as:
+
+- `keccak256(abi.encode(string proofOfTask, bytes data, address performer, uint16 taskDefinitionId))`
+
+The simulator sends to `AGGREGATOR_URL`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "sendTask",
+  "params": [
+    "<proofOfTask>",
+    "<data>",
+    "<taskDefinitionId>",
+    "<performerAddress>",
+    "<signature>",
+    "ecdsa",
+    "<targetChainId>"
+  ]
+}
+```
+
+- `proofOfTask`: `ipfsHash_nextSimulationTime_chainID`
+- `data`: `userOp.callData` as string
+- `performerAddress`: from `EXECUTOR_ADDRESS`
+- `signature`: produced using `EXECUTOR_PRIVATE_KEY`
+- `targetChainId`: from simulation result
 
 ## 🔄 Updating SDK
 
