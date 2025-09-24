@@ -63,7 +63,7 @@ export function getConfig() {
     maxBlockRanges,
     buildTag,
     commitHash,
-    apiOnly: process.env.API_ONLY === 'false',
+    apiOnly: process.env.API_ONLY === 'true',
     httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
     aggregatorURL: process.env.AGGREGATOR_URL || 'http://localhost:8080',
   } as const;
