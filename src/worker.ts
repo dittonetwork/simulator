@@ -615,7 +615,7 @@ class WorkflowProcessor {
     for (const result of simulationResult.results as any[]) {
       const proofOfTask = `${this.workflow.ipfs_hash}_${result.nextSimulationTime}_${result.chainId}`;
       const data = result.userOp.callData.toString();
-      const taskDefinitionId = 0;
+      const taskDefinitionId = 1;
       const performerAddress = config.executorAddress;
       const targetChainId = result.chainId;
       const dataHex = stringToHex(data) as `0x${string}`;
