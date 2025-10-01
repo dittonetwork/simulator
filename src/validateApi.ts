@@ -3,12 +3,81 @@ import { getLogger } from './logger.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
 import { reportingClient } from './reportingClient.js';
 import { bigIntToString } from './utils.js';
+import { AbiCoder } from 'ethers';
 
 const logger = getLogger('ValidateAPI');
 const router = Router();
 
 const isProd = process.env.IS_PROD === 'true';
 const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
+
+type Hex = `0x${string}`;
+type PackedUserOperation = {
+  sender: Hex;                     // address
+  nonce: bigint;                   // uint256
+  initCode: Hex;                   // bytes
+  callData: Hex;                   // bytes
+  accountGasLimits: Hex;           // bytes32 (verifGas << 128 | callGas)
+  preVerificationGas: bigint;      // uint256
+  gasFees: Hex;                    // bytes32 (maxPriorityFee << 128 | maxFee)
+  paymasterAndData: Hex;           // bytes
+  signature: Hex;                  // bytes
+};
+
+// Tuple type for packed user operation: (address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)
+const tupleType = '(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)';
+
+/**
+ * Parse the encoded tuple data from the validation request
+ * @param data - The encoded tuple data as hex string
+ * @returns Parsed PackedUserOperation or null if parsing fails
+ */
+function parseTupleData(data: string): PackedUserOperation | null {
+  try {
+    if (!data || typeof data !== 'string' || !data.startsWith('0x')) {
+      logger.warn('[ValidateAPI] Invalid data format: must be a hex string');
+      return null;
+    }
+
+    const abiCoder = AbiCoder.defaultAbiCoder();
+    const decoded = abiCoder.decode([tupleType], data);
+    
+    if (!decoded || decoded.length === 0) {
+      logger.warn('[ValidateAPI] Failed to decode tuple data');
+      return null;
+    }
+
+    const tupleData = decoded[0];
+    const packedUserOp: PackedUserOperation = {
+      sender: tupleData[0] as Hex,
+      nonce: tupleData[1] as bigint,
+      initCode: tupleData[2] as Hex,
+      callData: tupleData[3] as Hex,
+      accountGasLimits: tupleData[4] as Hex,
+      preVerificationGas: tupleData[5] as bigint,
+      gasFees: tupleData[6] as Hex,
+      paymasterAndData: tupleData[7] as Hex,
+      signature: tupleData[8] as Hex,
+    };
+
+    logger.info(`[ValidateAPI] Successfully parsed tuple data: ${JSON.stringify({
+      sender: packedUserOp.sender,
+      nonce: packedUserOp.nonce.toString(),
+      initCode: packedUserOp.initCode,
+      callData: packedUserOp.callData,
+      accountGasLimits: packedUserOp.accountGasLimits,
+      preVerificationGas: packedUserOp.preVerificationGas.toString(),
+      gasFees: packedUserOp.gasFees,
+      paymasterAndData: packedUserOp.paymasterAndData,
+      signature: packedUserOp.signature
+    })}`);
+
+    return packedUserOp;
+  } catch (error) {
+    logger.error({ error }, '[ValidateAPI] Failed to parse tuple data');
+    return null;
+  }
+}
 
 router.post('/task/validate', async (req: Request, res: Response) => {
   try {
@@ -122,8 +191,46 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       logger.info(`[ValidateAPI] No simulation results for targetChainId=${targetChainIdNum} ipfsHash=${ipfsHash}`);
       return res.status(200).json({ data: false, error: false, message: 'No simulation results for targetChainId' });
     }
+
+    // Parse the tuple data from the request
+    const packedUserOp = parseTupleData(data);
+    if (!packedUserOp) {
+      logger.warn(`[ValidateAPI] Failed to parse tuple data for ipfsHash=${ipfsHash}`);
+      return res.status(200).json({ data: false, error: true, message: 'Failed to parse tuple data' });
+    }
+
+    // Compare the parsed PackedUserOperation with simulation results
     approved = chainResults.some(
-      result => (result as any)?.userOp?.callData?.toString() === data
+      result => {
+        const simulationCallData = (result as any)?.userOp?.callData?.toString();
+        const simulationSignature = (result as any)?.userOp?.signature?.toString();
+        const simulationNonce = (result as any)?.userOp?.nonce?.toString();
+        
+        const callDataMatch = simulationCallData === packedUserOp.callData;
+        const signatureMatch = simulationSignature.toLowerCase() === packedUserOp.signature.toLowerCase();
+        const nonceMatch = simulationNonce === packedUserOp.nonce.toString();
+        
+        const matches = callDataMatch && signatureMatch && nonceMatch;
+        
+        logger.info(`[ValidateAPI] Validation comparison for chainId=${result.chainId} ${JSON.stringify({
+          callDataMatch,
+          signatureMatch,
+          nonceMatch,
+          overallMatch: matches,
+          requestPayload: {
+            callData: packedUserOp.callData,
+            signature: packedUserOp.signature,
+            nonce: packedUserOp.nonce.toString()
+          },
+          simulationPayload: {
+            callData: simulationCallData,
+            signature: simulationSignature,
+            nonce: simulationNonce
+          }
+        })}`);
+        
+        return matches;
+      }
     );
 
     logger.info(`[ValidateAPI] Validation ${approved ? 'APPROVED' : 'REJECTED'} for ipfsHash=${ipfsHash} targetChainId=${targetChainIdNum}`);

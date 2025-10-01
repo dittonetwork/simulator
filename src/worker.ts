@@ -18,6 +18,7 @@ import { bigIntToString } from './utils.js';
 import { getConfig } from './config.js';
 import { AbiCoder, keccak256 } from 'ethers';
 import { privateKeyToAccount } from 'viem/accounts';
+import { Interface } from 'ethers';
 
 dotenv.config();
 
@@ -612,16 +613,75 @@ class WorkflowProcessor {
 
   private async executeOthentic(simulationResult: any): Promise<any> {
     this.log(`Executing Othentic flow for workflow ${this.workflow.ipfs_hash} on chains: ${simulationResult.results.map((result: any) => result.chainId).join(', ')}`);
+
+    const tupleType = '(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)';
+
+    const toBytes32 = (hex: `0x${string}` | string | undefined) => {
+      const v = (hex ?? '0x') as `0x${string}`;
+      const raw = v.slice(2);
+      if (raw.length === 0) return '0x'.padEnd(66, '0') as `0x${string}`;
+      if (raw.length > 64) throw new Error('bytes32 overflow');
+      return (`0x${raw.padStart(64, '0')}`) as `0x${string}`;
+    };
+
+    const normHex = (v: unknown) => {
+      if (!v) return '0x';
+      const s = String(v);
+      return (s.startsWith('0x') ? s : `0x${s}`) as `0x${string}`;
+    };
+    type Hex = `0x${string}`;
+
+    function packU128Pair(high: bigint, low: bigint): Hex {
+      const mask = (1n << 128n) - 1n;
+      if (high < 0 || low < 0 || high > mask || low > mask) {
+        throw new Error('u128 overflow while packing pair');
+      }
+      const v = (high << 128n) | low;
+      return (`0x${v.toString(16).padStart(64, '0')}`) as Hex;
+    }
+
+    const normAddr = (a: unknown) =>
+      (typeof a === 'string' && a.startsWith('0x') && a.length === 42
+        ? (a as `0x${string}`)
+        : '0x0000000000000000000000000000000000000000') as `0x${string}`;
+
     for (const result of simulationResult.results as any[]) {
       const nextSimPart = (result.nextSimulationTime ?? Date.now()).toString();
       const proofOfTask = `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
-      const data = result.userOp.callData.toString();
       const taskDefinitionId = 1;
-      const performerAddress = config.executorAddress;
+      const performerAddress = config.executorAddress as `0x${string}`;
       const targetChainId = result.chainId;
+
+      const uo = result?.userOp || {};
+      const gas = result?.gas || {};
+
+      const packedOp = [
+        normAddr(uo?.sender),
+        typeof uo?.nonce === 'bigint' ? uo.nonce : BigInt(uo?.nonce ?? 0),
+        (normHex(uo?.initCode) as `0x${string}`),
+        (normHex(uo?.callData) as `0x${string}`),
+        toBytes32(packU128Pair(gas?.verificationGasLimit, gas?.callGasLimit)),
+        typeof uo?.preVerificationGas === 'bigint' ? uo.preVerificationGas : BigInt(uo?.preVerificationGas ?? 0),
+        toBytes32(packU128Pair(uo?.maxPriorityFeePerGas, uo?.maxFeePerGas)),
+        (normHex(uo?.paymasterAndData) as `0x${string}`),
+        (normHex(uo?.signature) as `0x${string}`),
+      ] as [
+        `0x${string}`,
+        bigint,
+        `0x${string}`,
+        `0x${string}`,
+        `0x${string}`,
+        bigint,
+        `0x${string}`,
+        `0x${string}`,
+        `0x${string}`,
+      ];
+
+      const txData = AbiCoder.defaultAbiCoder().encode([tupleType], [packedOp]) as `0x${string}`;
+
       const message = AbiCoder.defaultAbiCoder().encode(
         ['string', 'bytes', 'address', 'uint16'],
-        [proofOfTask, data, performerAddress, taskDefinitionId],
+        [proofOfTask, txData, performerAddress, taskDefinitionId],
       );
       const messageHash = keccak256(message);
       const messageHashHex = messageHash as `0x${string}`;
@@ -647,7 +707,7 @@ class WorkflowProcessor {
             method: 'sendTask',
             params: [
               proofOfTask,
-              data,
+              txData,
               taskDefinitionId,
               performerAddress,
               signature,
