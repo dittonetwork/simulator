@@ -16,8 +16,7 @@ import { Trigger, CronTriggerParams, EventTriggerParams, SerializedWorkflowData,
 import { reportingClient } from './reportingClient.js';
 import { bigIntToString } from './utils.js';
 import { getConfig } from './config.js';
-import { keccak256, encodeAbiParameters } from 'viem';
-import { stringToHex } from 'viem';
+import { AbiCoder, keccak256 } from 'ethers';
 import { privateKeyToAccount } from 'viem/accounts';
 
 dotenv.config();
@@ -612,59 +611,90 @@ class WorkflowProcessor {
   }
 
   private async executeOthentic(simulationResult: any): Promise<any> {
+    this.log(`Executing Othentic flow for workflow ${this.workflow.ipfs_hash} on chains: ${simulationResult.results.map((result: any) => result.chainId).join(', ')}`);
     for (const result of simulationResult.results as any[]) {
-      const proofOfTask = `${this.workflow.ipfs_hash}_${result.nextSimulationTime}_${result.chainId}`;
+      const nextSimPart = (result.nextSimulationTime ?? Date.now()).toString();
+      const proofOfTask = `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
       const data = result.userOp.callData.toString();
       const taskDefinitionId = 1;
       const performerAddress = config.executorAddress;
       const targetChainId = result.chainId;
-      const dataHex = stringToHex(data) as `0x${string}`;
-      const encoded = encodeAbiParameters(
-        [
-          { name: 'proofOfTask', type: 'string' },
-          { name: 'data', type: 'bytes' },
-          { name: 'performer', type: 'address' },
-          { name: 'taskDefinitionId', type: 'uint16' },
-        ],
-        [proofOfTask, dataHex, performerAddress as `0x${string}`, taskDefinitionId]
+      const message = AbiCoder.defaultAbiCoder().encode(
+        ['string', 'bytes', 'address', 'uint16'],
+        [proofOfTask, data, performerAddress, taskDefinitionId],
       );
-      const messageHash = keccak256(encoded);
+      const messageHash = keccak256(message);
+      const messageHashHex = messageHash as `0x${string}`;
 
       let signature: `0x${string}`;
       try {
         const pk = (process.env.EXECUTOR_PRIVATE_KEY || config.executorPrivateKey || '').trim();
         if (!pk) throw new Error('Missing EXECUTOR_PRIVATE_KEY');
         const account = privateKeyToAccount(pk as `0x${string}`);
-        signature = await account.sign({ hash: messageHash });
+        signature = await account.sign({ hash: messageHashHex });
         this.log(`Othentic signature built for chain ${targetChainId}: ${signature}`);
       } catch (e) {
         this.error('Failed to sign messageHash for Othentic flow', e);
         return { success: false, skipped: true, reason: `failed_to_sign_message_hash ${e}` };
       }
 
-      const response = await fetch(`${config.aggregatorURL}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'sendTask',
-          params: [
-            proofOfTask,
-            data,
-            taskDefinitionId,
-            performerAddress,
-            signature,
-            'ecdsa',
-            targetChainId,
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        this.error(`Failed to send task to aggregator for chain ${targetChainId}`, response);
-        return { success: false, skipped: true, reason: `failed_to_send_task_to_aggregator ${response.statusText}` };
+      try {
+        const response = await fetch(config.aggregatorURL, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'sendTask',
+            params: [
+              proofOfTask,
+              data,
+              taskDefinitionId,
+              performerAddress,
+              signature,
+              'ecdsa',
+              targetChainId,
+            ],
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+      
+        if (!response.ok) {
+          let bodyText = '';
+          try { bodyText = await response.text(); } catch {}
+          this.error(`Aggregator responded ${response.status} ${response.statusText} for chain ${targetChainId}`, {
+            url: config.aggregatorURL,
+            status: response.status,
+            statusText: response.statusText,
+            body: bodyText?.slice(0, 4000), 
+          });
+          return {
+            success: false,
+            skipped: true,
+            reason: `aggregator_http_${response.status}`,
+          };
+        }
+      } catch (err) {
+        const e: any = err;
+        const c: any = e?.cause ?? {};
+        
+        this.error(`Network error while sending task to aggregator for chain ${targetChainId}`, {
+          url: config.aggregatorURL,
+          name: e?.name,
+          message: e?.message,
+          code: c?.code,          
+          errno: c?.errno,        
+          syscall: c?.syscall,    
+          hostname: c?.hostname, 
+          address: c?.address,
+          port: c?.port,
+          stack: e?.stack,
+        });
+        return {
+          success: false,
+          skipped: true,
+          reason: `fetch_failed_${c?.code || 'unknown'}`,
+        };
       }
-
     }
 
     return { success: true, skipped: false, reason: 'othentic_flow_executed' };

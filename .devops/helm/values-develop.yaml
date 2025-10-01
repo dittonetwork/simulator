@@ -133,5 +133,5 @@ env:
   IPFS_SERVICE_URL: "https://ipfs-service.develop.dittonetwork.io"
   IS_PROD: "false"
   EXECUTOR_ADDRESS: "0xF177179963aA0EDE80Be4396d04d970171CF6a36"
-  AGGREGATOR_URL: "othentic-node-aggregator.epsilon.svc.cluster.local:8545"
+  AGGREGATOR_URL: "http://othentic-node-internal.epsilon.svc.cluster.local:8545"
   OTHENTIC_FLOW: "true"
