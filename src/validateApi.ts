@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { getLogger } from './logger.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
 import { reportingClient } from './reportingClient.js';
-import { bigIntToString } from './utils.js';
 import { AbiCoder } from 'ethers';
 
 const logger = getLogger('ValidateAPI');
