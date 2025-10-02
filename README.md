@@ -173,7 +173,7 @@ Request body (JSON):
 
 Constraints:
 - `proofOfTask`: required string, format `ipfsHash_nextSimulationTime_chainID`
-- `data`: required non-empty string (expected to match `userOp.callData` for the target chain)
+- `data`: required non-empty string (encoded tuple `(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)` containing packed user operation data)
 - `taskDefinitionID`: uint16 (0…65535)
 - `performer`: EVM address (`0x` + 40 hex chars)
 - `targetChainId`: uint16 (chain to compare results against)
@@ -286,7 +286,7 @@ The simulator sends to `AGGREGATOR_URL`:
 ```
 
 - `proofOfTask`: `ipfsHash_nextSimulationTime_chainID`
-- `data`: `userOp.callData` as string
+- `data`: encoded tuple containing packed user operation data
 - `performerAddress`: from `EXECUTOR_ADDRESS`
 - `signature`: produced using `EXECUTOR_PRIVATE_KEY`
 - `targetChainId`: from simulation result
