@@ -202,18 +202,15 @@ router.post('/task/validate', async (req: Request, res: Response) => {
     approved = chainResults.some(
       result => {
         const simulationCallData = (result as any)?.userOp?.callData?.toString();
-        const simulationSignature = (result as any)?.userOp?.signature?.toString();
         const simulationNonce = (result as any)?.userOp?.nonce?.toString();
         
         const callDataMatch = simulationCallData === packedUserOp.callData;
-        const signatureMatch = simulationSignature.toLowerCase() === packedUserOp.signature.toLowerCase();
         const nonceMatch = simulationNonce === packedUserOp.nonce.toString();
         
-        const matches = callDataMatch && signatureMatch && nonceMatch;
+        const matches = callDataMatch && nonceMatch;
         
         logger.info(`[ValidateAPI] Validation comparison for chainId=${result.chainId} ${JSON.stringify({
           callDataMatch,
-          signatureMatch,
           nonceMatch,
           overallMatch: matches,
           requestPayload: {
@@ -223,7 +220,6 @@ router.post('/task/validate', async (req: Request, res: Response) => {
           },
           simulationPayload: {
             callData: simulationCallData,
-            signature: simulationSignature,
             nonce: simulationNonce
           }
         })}`);
