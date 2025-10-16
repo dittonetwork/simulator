@@ -649,11 +649,12 @@ class WorkflowProcessor {
       const nextSimPart = (result.nextSimulationTime ?? Date.now()).toString();
       const proofOfTask = `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
       const taskDefinitionId = 1;
-      const performerAddress = config.executorAddress as `0x${string}`;
+      const performerAddress = config.othenticExecutorAddress as `0x${string}`;
       const targetChainId = result.chainId;
 
       const uo = result?.userOp || {};
       const gas = result?.gas || {};
+      const uoSign = result?.signature || '';
 
       const packedOp = [
         normAddr(uo?.sender),
@@ -664,7 +665,7 @@ class WorkflowProcessor {
         typeof uo?.preVerificationGas === 'bigint' ? uo.preVerificationGas : BigInt(uo?.preVerificationGas ?? 0),
         toBytes32(packU128Pair(uo?.maxPriorityFeePerGas, uo?.maxFeePerGas)),
         (normHex(uo?.paymasterAndData) as `0x${string}`),
-        (normHex(uo?.signature) as `0x${string}`),
+        (normHex(uoSign) as `0x${string}`),
       ] as [
         `0x${string}`,
         bigint,

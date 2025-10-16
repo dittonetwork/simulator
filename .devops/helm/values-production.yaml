@@ -132,4 +132,3 @@ env:
   SKIP_AUTH: "true"
   IPFS_SERVICE_URL: "https://ipfs-service.dittonetwork.io"
   IS_PROD: "true"
-  EXECUTOR_ADDRESS: "0xF177179963aA0EDE80Be4396d04d970171CF6a36"
