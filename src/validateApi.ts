@@ -3,12 +3,16 @@ import { getLogger } from './logger.js';
 import { getWorkflowSDKService } from './integrations/workflowSDK.js';
 import { reportingClient } from './reportingClient.js';
 import { AbiCoder } from 'ethers';
+import { getConfig } from './config.js';
+import EventMonitor from './eventMonitor.js';
+import { bigIntToString } from './utils.js';
 
 const logger = getLogger('ValidateAPI');
 const router = Router();
 
 const isProd = process.env.IS_PROD === 'true';
 const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
+const config = getConfig();
 
 type Hex = `0x${string}`;
 type PackedUserOperation = {
@@ -76,6 +80,17 @@ function parseTupleData(data: string): PackedUserOperation | null {
     logger.error({ error }, '[ValidateAPI] Failed to parse tuple data');
     return null;
   }
+}
+
+function extractErrorCode(error?: string): string | undefined {
+  if (!error) return undefined;
+  const line = error
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.startsWith('Details: '));
+  if (!line) return undefined;
+  const value = line.slice('Details: '.length).trim();
+  return value || undefined;
 }
 
 router.post('/task/validate', async (req: Request, res: Response) => {
@@ -178,6 +193,46 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       ipfsServiceUrl,
       accessToken || undefined,
     );
+
+    try {
+      const eventMonitor = new EventMonitor();
+      try {
+        eventMonitor.updateAccessToken(accessToken || undefined);
+      } catch {}
+      if (simulationResult && Array.isArray((simulationResult as any).results)) {
+        for (const result of (simulationResult as any).results) {
+          const chainId = result.chainId;
+          let blockNumber: number | undefined = undefined;
+          try {
+            const bn = await eventMonitor.getCurrentBlockNumber(chainId);
+            blockNumber = Number(bn);
+          } catch (e) {
+            logger.warn(`[ValidateAPI] Failed to fetch current block number for chain ${chainId}: ${String((e as Error)?.message || e)}`);
+          }
+
+          const report: any = {
+            ipfsHash,
+            simulationSuccess: !!simulationResult.success,
+            chainsBlockNumbers: blockNumber !== undefined ? { [chainId]: blockNumber } : undefined,
+            start: result.start,
+            finish: result.finish,
+            gas_estimate: result.gas?.totalGasEstimate || undefined,
+            error_code: extractErrorCode(result.error),
+            userOp: bigIntToString(result),
+            buildTag: config.buildTag,
+            commitHash: config.commitHash,
+          };
+
+          try {
+            await reportingClient.submitReport(bigIntToString(report));
+          } catch (error) {
+            logger.error({ error }, `[ValidateAPI] Failed to submit simulation report for chain ${chainId}`);
+          }
+        }
+      }
+    } catch (e) {
+      logger.error({ error: e }, '[ValidateAPI] Unexpected error while reporting simulation results');
+    }
 
     let approved = !!simulationResult?.success;
     if (!approved) {
