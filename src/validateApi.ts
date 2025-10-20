@@ -200,10 +200,7 @@ router.post('/task/validate', async (req: Request, res: Response) => {
         eventMonitor.updateAccessToken(accessToken || undefined);
       } catch {}
       const performerAddrLc = typeof performer === 'string' ? performer.toLowerCase() : '';
-      const ourAddrs = [config.othenticExecutorAddress, config.executorAddress]
-        .filter(Boolean)
-        .map((a) => (a as string).toLowerCase());
-      const shouldSkipReport = performerAddrLc !== '' && ourAddrs.includes(performerAddrLc);
+      const shouldSkipReport = performerAddrLc !== '' && config.operatorAddress.toLowerCase() === performerAddrLc;
       if (simulationResult && Array.isArray((simulationResult as any).results)) {
         for (const result of (simulationResult as any).results) {
           const chainId = result.chainId;

@@ -2,6 +2,7 @@ import dotenv, { config } from 'dotenv';
 import { z } from 'zod';
 
 import { getChainConfig, CHAINS } from '@ditto/workflow-sdk';
+import { Wallet } from 'ethers';
 dotenv.config();
 
 export function getConfig() {
@@ -26,6 +27,7 @@ export function getConfig() {
     httpPort: z.number().int().positive(),
     aggregatorURL: z.string(),
     othenticFlow: z.boolean(),
+    operatorAddress: z.string(),
   });
 
   const rpcUrls = Object.fromEntries(
@@ -49,6 +51,18 @@ export function getConfig() {
   const buildTag = process.env.BUILD_TAG || 'unset';
   const commitHash = process.env.COMMIT_HASH || 'unset';
 
+  let operatorAddress = '';
+  try {
+    const pk = (process.env.EXECUTOR_PRIVATE_KEY || '').trim();
+    if (pk) {
+      const w = new Wallet(pk as `0x${string}`);
+      operatorAddress = w.address;
+    }
+  } catch {}
+  if (!operatorAddress) {
+    operatorAddress = process.env.EXECUTOR_ADDRESS || '';
+  }
+
   const cfg = {
     mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017',
     dbName: process.env.DB_NAME || 'indexer',
@@ -68,6 +82,7 @@ export function getConfig() {
     apiOnly: process.env.API_ONLY === 'true',
     httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
     aggregatorURL: process.env.AGGREGATOR_URL || 'http://localhost:8080',
+    operatorAddress,
   } as const;
   return Object.freeze(schema.parse(cfg));
 }
