@@ -199,6 +199,11 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       try {
         eventMonitor.updateAccessToken(accessToken || undefined);
       } catch {}
+      const performerAddrLc = typeof performer === 'string' ? performer.toLowerCase() : '';
+      const ourAddrs = [config.othenticExecutorAddress, config.executorAddress]
+        .filter(Boolean)
+        .map((a) => (a as string).toLowerCase());
+      const shouldSkipReport = performerAddrLc !== '' && ourAddrs.includes(performerAddrLc);
       if (simulationResult && Array.isArray((simulationResult as any).results)) {
         for (const result of (simulationResult as any).results) {
           const chainId = result.chainId;
@@ -224,7 +229,13 @@ router.post('/task/validate', async (req: Request, res: Response) => {
           };
 
           try {
-            await reportingClient.submitReport(bigIntToString(report));
+            if (shouldSkipReport) {
+              logger.info(
+                `[ValidateAPI] Skipping report submission for chain ${chainId} because performer equals our address (${performer})`,
+              );
+            } else {
+              await reportingClient.submitReport(bigIntToString(report));
+            }
           } catch (error) {
             logger.error({ error }, `[ValidateAPI] Failed to submit simulation report for chain ${chainId}`);
           }
