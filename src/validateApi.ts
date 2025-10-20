@@ -221,6 +221,7 @@ router.post('/task/validate', async (req: Request, res: Response) => {
             chainsBlockNumbers: blockNumber !== undefined ? { [chainId]: blockNumber } : undefined,
             start: result.start,
             finish: result.finish,
+            expected_simulation_start: nextSimulationTimeIso,
             gas_estimate: result.gas?.totalGasEstimate || undefined,
             error_code: extractErrorCode(result.error),
             userOp: bigIntToString(result),
