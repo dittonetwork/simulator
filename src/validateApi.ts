@@ -135,7 +135,7 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: chainID must be a uint16' });
     }
 
-    const nextSimulationTimeIso = new Date(nextSimulationTime * 1000).toISOString();
+    const nextSimulationTimeIso = new Date(nextSimulationTime).toISOString();
     logger.info(
       `[ValidateAPI] Validation request for ipfsHash=${ipfsHash} nextSimulationTime=${nextSimulationTime} (${nextSimulationTimeIso}) chainID=${chainIdFromProof}`
     );
