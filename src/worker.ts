@@ -613,6 +613,11 @@ class WorkflowProcessor {
 
   private async executeOthentic(simulationResult: any): Promise<any> {
     this.log(`Executing Othentic flow for workflow ${this.workflow.ipfs_hash} on chains: ${simulationResult.results.map((result: any) => result.chainId).join(', ')}`);
+    
+    // Log DataRef context if present - this ensures deterministic consensus
+    if (simulationResult.dataRefContextSerialized) {
+      this.log(`DataRef context present: ${simulationResult.dataRefContextSerialized.length} bytes`);
+    }
 
     const tupleType = '(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)';
 
@@ -647,7 +652,14 @@ class WorkflowProcessor {
 
     for (const result of simulationResult.results as any[]) {
       const nextSimPart = (result.nextSimulationTime ?? Date.now()).toString();
-      const proofOfTask = `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
+      // Include dataRefContext hash in proofOfTask for deterministic consensus
+      // Operators will use this to verify they get the same results on the same blocks
+      const dataRefHash = simulationResult.dataRefContextSerialized 
+        ? keccak256(AbiCoder.defaultAbiCoder().encode(['string'], [simulationResult.dataRefContextSerialized])).slice(0, 18)
+        : '';
+      const proofOfTask = dataRefHash 
+        ? `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}_${dataRefHash}`
+        : `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
       const taskDefinitionId = 1;
       const performerAddress = config.othenticExecutorAddress as `0x${string}`;
       const targetChainId = result.chainId;
@@ -700,21 +712,31 @@ class WorkflowProcessor {
       }
 
       try {
+        // Build params array - include dataRefContext for deterministic consensus
+        const taskParams: any[] = [
+          proofOfTask,
+          txData,
+          taskDefinitionId,
+          performerAddress,
+          signature,
+          'ecdsa',
+          targetChainId,
+        ];
+        
+        // Add dataRefContext as optional 8th parameter if present
+        // Operators will use this to reproduce read-calls on the same blocks
+        if (simulationResult.dataRefContextSerialized) {
+          taskParams.push(simulationResult.dataRefContextSerialized);
+          this.log(`Including dataRefContext in task params for deterministic consensus`);
+        }
+        
         const response = await fetch(config.aggregatorURL, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             method: 'sendTask',
-            params: [
-              proofOfTask,
-              txData,
-              taskDefinitionId,
-              performerAddress,
-              signature,
-              'ecdsa',
-              targetChainId,
-            ],
+            params: taskParams,
           }),
           signal: AbortSignal.timeout(10_000),
         });
