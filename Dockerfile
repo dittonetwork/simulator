@@ -8,8 +8,11 @@ WORKDIR /app
 
 RUN apk add --no-cache git
 
-# Copy entire project source first, so we can update submodules
+# Copy entire project source first
 COPY . .
+
+# Initialize and update submodules (in case they weren't cloned with --recursive)
+RUN git submodule update --init --recursive || true
 
 # Install dependencies for all workspaces
 RUN npm install

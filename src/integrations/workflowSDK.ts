@@ -1,4 +1,12 @@
-import { IpfsStorage, Workflow, WorkflowContract, executeFromIpfs, type SerializedWorkflowData } from '@ditto/workflow-sdk';
+import { 
+  IpfsStorage, 
+  Workflow, 
+  WorkflowContract, 
+  executeFromIpfs, 
+  type SerializedWorkflowData,
+  type DataRefContext,
+  serializeDataRefContext,
+} from '@ditto/workflow-sdk';
 import { Wallet, JsonRpcProvider } from 'ethers';
 import { getLogger } from '../logger.js';
 import { deserialize } from '@ditto/workflow-sdk';
@@ -29,6 +37,13 @@ export interface SimulationResult {
   }>;
   markRunHash?: string;
   error?: string;
+  /** 
+   * DataRef context for deterministic consensus.
+   * Contains block numbers used for read-calls - operators must use same blocks.
+   */
+  dataRefContext?: DataRefContext;
+  /** Serialized dataRefContext for easy transmission */
+  dataRefContextSerialized?: string;
 }
 
 export interface ExecutionResult {
@@ -89,6 +104,9 @@ export class WorkflowSDKIntegration {
 
   /**
    * Simulate workflow execution using stored workflow data
+   * 
+   * Returns dataRefContext with block numbers for deterministic consensus.
+   * Pass this context to operators so they can reproduce the same read-calls.
    */
   async simulateWorkflow(
     _workflowData: Workflow,
@@ -123,6 +141,14 @@ export class WorkflowSDKIntegration {
       logger.info(`Simulation completed successfully`);
       logger.info(`- Success: ${result.success}`);
       logger.info(`- Sessions: ${result.results.length}`);
+      
+      // Log DataRef context if present
+      if (result.dataRefContext && result.dataRefContext.resolvedRefs.length > 0) {
+        logger.info(`- DataRef context: ${result.dataRefContext.resolvedRefs.length} resolved refs`);
+        Object.entries(result.dataRefContext.chainBlocks).forEach(([chainId, block]) => {
+          logger.info(`  Chain ${chainId}: block ${block}`);
+        });
+      }
 
       // Log gas estimates
       result.results.forEach((res: any, i: number) => {
@@ -139,7 +165,20 @@ export class WorkflowSDKIntegration {
         }
       });
 
-      return result as SimulationResult;
+      // Build simulation result with dataRefContext
+      const simResult: SimulationResult = {
+        success: result.success,
+        results: result.results as any,
+        markRunHash: result.markRunHash,
+        dataRefContext: result.dataRefContext,
+      };
+      
+      // Add serialized context for easy transmission to operators
+      if (result.dataRefContext && result.dataRefContext.resolvedRefs.length > 0) {
+        simResult.dataRefContextSerialized = serializeDataRefContext(result.dataRefContext);
+      }
+
+      return simResult;
     } catch (error) {
       logger.error({ error: error }, 'Simulation failed');
       throw error;
