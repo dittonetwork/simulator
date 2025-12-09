@@ -8,7 +8,7 @@ import EventMonitor from './eventMonitor.js';
 import { bigIntToString } from './utils.js';
 
 const logger = getLogger('ValidateAPI');
-const router = Router();
+const router: Router = Router();
 
 const isProd = process.env.IS_PROD === 'true';
 const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
