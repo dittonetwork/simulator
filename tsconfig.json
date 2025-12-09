@@ -23,7 +23,15 @@
         ],
         "baseUrl": ".",
         "paths": {
-            "@ditto-workflow-sdk": ["./ditto-workflow-sdk"]
+            "@ditto-workflow-sdk": ["./ditto-workflow-sdk"],
+            "@ditto/workflow-sdk": [
+                "./ditto-workflow-sdk/src",
+                "./ditto-workflow-sdk/dist"
+            ],
+            "@ditto/workflow-sdk/*": [
+                "./ditto-workflow-sdk/src/*",
+                "./ditto-workflow-sdk/dist/*"
+            ]
         }
     },
     "include": [

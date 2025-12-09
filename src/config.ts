@@ -1,12 +1,16 @@
 import dotenv, { config } from 'dotenv';
 import { z } from 'zod';
 
-import { getChainConfig, CHAINS } from '@ditto/workflow-sdk';
+import { getChainConfig } from '@ditto/workflow-sdk';
 import { Wallet } from 'ethers';
 dotenv.config();
 
 export function getConfig() {
   const chainConfig = getChainConfig(process.env.IPFS_SERVICE_URL || "");
+  const CHAINS = Object.entries(chainConfig).map(([id, cfg]) => ({
+    id: Number(id),
+    ...cfg,
+  }));
 
   const schema = z.object({
     mongoUri: z.string().startsWith('mongodb://'),
@@ -31,18 +35,18 @@ export function getConfig() {
   });
 
   const rpcUrls = Object.fromEntries(
-    CHAINS.map(chain => [
+    CHAINS.map((chain) => [
       chain.id,
       process.env[`RPC_URL_${chain.id}`] || chainConfig[chain.id]?.rpcUrl || '',
     ]),
   ) as Record<number, string>;
 
   const chains = Object.fromEntries(
-    CHAINS.map(chain => [chain.id, chain]),
+    CHAINS.map((chain) => [chain.id, chain.chain]),
   ) as Record<number, any>;
 
   const maxBlockRanges = Object.fromEntries(
-    CHAINS.map(chain => [
+    CHAINS.map((chain) => [
       chain.id,
       parseInt(process.env[`MAX_BLOCK_RANGE_${chain.id}`] || '10000', 10),
     ]),
