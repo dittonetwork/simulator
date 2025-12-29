@@ -6,6 +6,7 @@ import { AbiCoder } from 'ethers';
 import { getConfig } from './config.js';
 import EventMonitor from './eventMonitor.js';
 import { bigIntToString } from './utils.js';
+import { createWasmClient, WasmClient } from './utils/wasmClient.js';
 
 const logger = getLogger('ValidateAPI');
 const router: Router = Router();
@@ -13,6 +14,24 @@ const router: Router = Router();
 const isProd = process.env.IS_PROD === 'true';
 const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
 const config = getConfig();
+
+// Initialize WASM client if server URL is configured
+const wasmClient = config.wasmServerUrl ? createWasmClient() : null;
+if (wasmClient) {
+  logger.info(`WASM client initialized for server: ${config.wasmServerUrl}`);
+  // Health check on startup
+  wasmClient.healthCheck().then(healthy => {
+    if (healthy) {
+      logger.info('WASM server health check passed');
+    } else {
+      logger.warn('WASM server health check failed - validation may not work');
+    }
+  }).catch(err => {
+    logger.warn({ error: err }, 'WASM server health check error');
+  });
+} else {
+  logger.info('WASM validation disabled (WASM_SERVER_URL not set)');
+}
 
 type Hex = `0x${string}`;
 type PackedUserOperation = {
@@ -291,6 +310,58 @@ router.post('/task/validate', async (req: Request, res: Response) => {
         return matches;
       }
     );
+
+    // WASM validation (if enabled)
+    if (wasmClient && approved) {
+      try {
+        // Extract WASM code from request if provided, or use default validation logic
+        const wasmB64 = (req.body as any).wasmB64;
+        const wasmHash = (req.body as any).wasmHash;
+        
+        if (wasmB64) {
+          logger.info(`[ValidateAPI] Running WASM validation for ipfsHash=${ipfsHash}`);
+          
+          const wasmInput = {
+            proofOfTask,
+            packedUserOp: {
+              sender: packedUserOp.sender,
+              nonce: packedUserOp.nonce.toString(),
+              callData: packedUserOp.callData,
+              signature: packedUserOp.signature,
+            },
+            simulationResult: chainResults[0],
+            targetChainId: targetChainIdNum,
+          };
+
+          const wasmResult = await wasmClient.run({
+            jobId: `validate-${ipfsHash}-${Date.now()}`,
+            wasmHash,
+            wasmB64,
+            input: wasmInput,
+            timeoutMs: 2000, // 2 second timeout for validation
+          });
+
+          if (!wasmResult.ok) {
+            logger.warn(`[ValidateAPI] WASM validation failed: ${wasmResult.error}`);
+            approved = false;
+          } else if (wasmResult.result && typeof wasmResult.result === 'object') {
+            // WASM should return { approved: boolean, reason?: string }
+            const wasmApproved = (wasmResult.result as any).approved === true;
+            if (!wasmApproved) {
+              logger.info(`[ValidateAPI] WASM validation rejected: ${(wasmResult.result as any).reason || 'no reason provided'}`);
+              approved = false;
+            } else {
+              logger.info(`[ValidateAPI] WASM validation approved`);
+            }
+          }
+        } else {
+          logger.debug(`[ValidateAPI] WASM validation skipped (no wasmB64 in request)`);
+        }
+      } catch (error) {
+        logger.error({ error }, `[ValidateAPI] WASM validation error - rejecting for safety`);
+        approved = false;
+      }
+    }
 
     logger.info(`[ValidateAPI] Validation ${approved ? 'APPROVED' : 'REJECTED'} for ipfsHash=${ipfsHash} targetChainId=${targetChainIdNum}`);
     return res.status(200).json({ data: approved, error: false, message: null });
