@@ -32,6 +32,7 @@ export function getConfig() {
     aggregatorURL: z.string(),
     othenticFlow: z.boolean(),
     operatorAddress: z.string(),
+    wasmServerUrl: z.string().optional(),
   });
 
   const rpcUrls = Object.fromEntries(
@@ -87,6 +88,7 @@ export function getConfig() {
     httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
     aggregatorURL: process.env.AGGREGATOR_URL || 'http://localhost:8080',
     operatorAddress,
+    wasmServerUrl: process.env.WASM_SERVER_URL || undefined,
   } as const;
   return Object.freeze(schema.parse(cfg));
 }

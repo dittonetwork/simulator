@@ -11,6 +11,7 @@ import type { Workflow } from './types/workflow.js';
 import { reportingClient } from './reportingClient.js';
 import { getConfig } from './config.js';
 import validateRouter from './validateApi.js';
+import { wasmHealthHandler, wasmRunHandler } from './server.js';
 
 dotenv.config();
 const logger = getLogger('Simulator');
@@ -346,10 +347,31 @@ class Simulator {
 // Entry point
 const simulator = new Simulator();
 const app = express();
-app.use(bodyParser.json());
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  logger.info({ method: req.method, url: req.url, ip: req.ip }, 'Incoming request');
+  next();
+});
+
+// Configure body parser with larger limit for WASM payloads (12MB to match server.ts MAX_BODY_BYTES)
+const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? String(12 * 1024 * 1024)); // 12MB
+app.use(bodyParser.json({ limit: MAX_BODY_BYTES }));
 app.use(validateRouter);
 
-const { apiOnly, httpPort } = getConfig();
+const { apiOnly, httpPort, wasmServerUrl } = getConfig();
+
+// Integrate WASM server endpoints if not using external WASM server
+// This allows operators to use the same server for both validation API and WASM execution
+if (!wasmServerUrl) {
+  app.get('/wasm/health', wasmHealthHandler);
+  app.post('/wasm/run', wasmRunHandler);
+  logger.info('WASM server endpoints integrated into main Express app at /wasm/*');
+  logger.info('  - GET /wasm/health - Health check');
+  logger.info('  - POST /wasm/run - Execute WASM code');
+} else {
+  logger.info(`Using external WASM server: ${wasmServerUrl}`);
+}
 
 let isShuttingDown = false;
 async function gracefulShutdown(signal: NodeJS.Signals) {
