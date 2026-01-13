@@ -1,0 +1,93 @@
+{{- if .Values.wasmSandbox.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simulator.fullname" . }}-wasm-sandbox
+  labels:
+    {{- include "simulator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: wasm-sandbox
+spec:
+  {{- if not .Values.wasmSandbox.autoscaling.enabled }}
+  replicas: {{ .Values.wasmSandbox.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "simulator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: wasm-sandbox
+  template:
+    metadata:
+      {{- with .Values.wasmSandbox.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "simulator.labels" . | nindent 8 }}
+        app.kubernetes.io/component: wasm-sandbox
+        {{- with .Values.wasmSandbox.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "simulator.serviceAccountName" . }}
+      {{- with .Values.wasmSandbox.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: wasm-sandbox
+          {{- with .Values.wasmSandbox.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.wasmSandbox.image.repository }}:{{ .Values.wasmSandbox.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.wasmSandbox.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.wasmSandbox.service.port }}
+              protocol: TCP
+          env:
+            {{- range $key, $value := .Values.wasmSandbox.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          envFrom:
+            {{- if .Values.wasmSandbox.secretName }}
+            - secretRef:
+                name: {{ .Values.wasmSandbox.secretName }}
+            {{- end }}
+          {{- with .Values.wasmSandbox.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.wasmSandbox.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.wasmSandbox.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.wasmSandbox.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.wasmSandbox.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.wasmSandbox.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.wasmSandbox.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.wasmSandbox.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
