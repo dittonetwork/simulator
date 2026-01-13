@@ -192,4 +192,62 @@ export class Database {
       this.db = null;
     }
   }
+
+  /**
+   * Store WASM module bytes in database indexed by hash
+   */
+  async storeWasmModule(wasmHash: string, wasmBytes: Buffer): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+    
+    await this.db.collection(COLLECTIONS.WASM_MODULES).updateOne(
+      { hash: wasmHash },
+      {
+        $set: {
+          hash: wasmHash,
+          bytes: wasmBytes,
+          storedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+  }
+
+  /**
+   * Retrieve WASM module bytes from database by hash
+   */
+  async getWasmModule(wasmHash: string): Promise<Buffer | null> {
+    if (!this.db) throw new Error('Database not connected');
+    
+    const doc = await this.db.collection(COLLECTIONS.WASM_MODULES).findOne(
+      { hash: wasmHash },
+      { projection: { bytes: 1 } }
+    );
+    
+    if (!doc || !doc.bytes) {
+      return null;
+    }
+    
+    // Handle both Buffer and Binary types from MongoDB
+    if (Buffer.isBuffer(doc.bytes)) {
+      return doc.bytes;
+    }
+    if (doc.bytes && typeof doc.bytes.buffer === 'object') {
+      // MongoDB Binary type
+      return Buffer.from(doc.bytes.buffer);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Check if WASM module exists in database
+   */
+  async hasWasmModule(wasmHash: string): Promise<boolean> {
+    if (!this.db) throw new Error('Database not connected');
+    const count = await this.db.collection(COLLECTIONS.WASM_MODULES).countDocuments(
+      { hash: wasmHash },
+      { limit: 1 }
+    );
+    return count > 0;
+  }
 }

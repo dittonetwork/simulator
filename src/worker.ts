@@ -101,7 +101,8 @@ class WorkflowProcessor {
 
   async initializeSDK() {
     try {
-      this.workflowSDK = getWorkflowSDKService();
+      // Pass database instance to SDK for WASM module lookup
+      this.workflowSDK = getWorkflowSDKService(undefined, this.db);
     } catch (error) {
       this.error('Failed to initialize SDK', error);
       throw error;

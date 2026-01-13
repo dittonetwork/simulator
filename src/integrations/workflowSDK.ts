@@ -6,7 +6,10 @@ import {
   type SerializedWorkflowData,
   type DataRefContext,
   serializeDataRefContext,
+  type WasmRefContext,
 } from '@ditto/workflow-sdk';
+import { createWasmClient } from '../utils/wasmClient.js';
+import { Database } from '../db.js';
 import { Wallet, JsonRpcProvider } from 'ethers';
 import { getLogger } from '../logger.js';
 import { deserialize } from '@ditto/workflow-sdk';
@@ -77,11 +80,13 @@ export class WorkflowSDKIntegration {
 
   private workflowContract: WorkflowContract;
 
-  constructor(config: WorkflowSDKConfig) {
+  private database: Database | null;
+
+  constructor(config: WorkflowSDKConfig, database?: Database) {
     this.config = config;
     this.storage = new IpfsStorage(config.ipfsServiceUrl);
-
     this.workflowContract = new WorkflowContract(config.workflowContractAddress as `0x${string}`);
+    this.database = database || null;
   }
 
   /**
@@ -127,6 +132,16 @@ export class WorkflowSDKIntegration {
         throw new Error('Executor address or private key is not defined in environment variables');
       }
 
+      // Create WASM client if available
+      const wasmClient = createWasmClient();
+      
+      // Ensure database is connected for WASM module lookup
+      let db: Database | undefined;
+      if (this.database) {
+        await this.database.connect();
+        db = this.database;
+      }
+      
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
@@ -136,6 +151,10 @@ export class WorkflowSDKIntegration {
         true,
         false,
         accessToken,
+        undefined, // dataRefContext - will be created
+        wasmClient || undefined,
+        db,
+        undefined, // wasmRefContext - will be created
       );
 
       logger.info(`Simulation completed successfully`);
@@ -198,6 +217,17 @@ export class WorkflowSDKIntegration {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
+      
+      // Create WASM client if available
+      const wasmClient = createWasmClient();
+      
+      // Ensure database is connected for WASM module lookup
+      let db: Database | undefined;
+      if (this.database) {
+        await this.database.connect();
+        db = this.database;
+      }
+      
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
@@ -207,6 +237,10 @@ export class WorkflowSDKIntegration {
         false,
         false,
         accessToken,
+        undefined, // dataRefContext
+        wasmClient || undefined,
+        db,
+        undefined, // wasmRefContext
       );
 
       logger.info(`Execution completed successfully`);
@@ -307,7 +341,7 @@ export function getDefaultConfig(): WorkflowSDKConfig {
 export class WorkflowSDKService {
   private integration: WorkflowSDKIntegration;
 
-  constructor(config: Partial<WorkflowSDKConfig> = {}) {
+  constructor(config: Partial<WorkflowSDKConfig> = {}, database?: Database) {
     const mergedConfig: WorkflowSDKConfig = {
       executorPrivateKey: config.executorPrivateKey || process.env.EXECUTOR_PRIVATE_KEY || '',
       executorAddress: config.executorAddress || process.env.EXECUTOR_ADDRESS || '',
@@ -317,7 +351,7 @@ export class WorkflowSDKService {
       chainId: config.chainId || parseInt(process.env.CHAIN_ID || '11155111', 10),
     } as WorkflowSDKConfig;
 
-    this.integration = new WorkflowSDKIntegration(mergedConfig);
+    this.integration = new WorkflowSDKIntegration(mergedConfig, database);
   }
 
   loadWorkflowData(ipfsHash: string) {
@@ -349,15 +383,15 @@ export class WorkflowSDKService {
   }
 }
 
-export function createWorkflowSDKService(config?: Partial<WorkflowSDKConfig>) {
-  return new WorkflowSDKService(config);
+export function createWorkflowSDKService(config?: Partial<WorkflowSDKConfig>, database?: Database) {
+  return new WorkflowSDKService(config, database);
 }
 
 let _globalInstance: WorkflowSDKService | null = null;
 
-export function getWorkflowSDKService(config?: Partial<WorkflowSDKConfig>) {
-  if (!_globalInstance || config) {
-    _globalInstance = createWorkflowSDKService(config);
+export function getWorkflowSDKService(config?: Partial<WorkflowSDKConfig>, database?: Database) {
+  if (!_globalInstance || config || database) {
+    _globalInstance = createWorkflowSDKService(config, database);
   }
   return _globalInstance;
 }
