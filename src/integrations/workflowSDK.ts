@@ -16,6 +16,7 @@ import { deserialize } from '@ditto/workflow-sdk';
 import { privateKeyToAccount } from 'viem/accounts';
 import { addressToEmptyAccount } from '@zerodev/sdk';
 import { Signer } from "@zerodev/sdk/types";
+import { getConfig } from '../config.js';
 
 const logger = getLogger('WorkflowSDK');
 
@@ -132,14 +133,39 @@ export class WorkflowSDKIntegration {
         throw new Error('Executor address or private key is not defined in environment variables');
       }
 
-      // Create WASM client if available
-      const wasmClient = createWasmClient();
+      // Load workflow to get owner address for whitelist check
+      const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
       
-      // Ensure database is connected for WASM module lookup
+      // Check if owner is whitelisted for WASM execution
+      const config = getConfig();
+      let wasmClient: any = undefined;
       let db: Database | undefined;
+      
       if (this.database) {
         await this.database.connect();
         db = this.database;
+        
+        // Get owner address from workflow
+        const ownerAddress = (workflowData.owner as any)?.address || workflowData.owner;
+        const ownerStr = typeof ownerAddress === 'string' ? ownerAddress : String(ownerAddress);
+        
+        // Check whitelist if enabled
+        if (config.wasmWhitelistEnabled) {
+          const isWhitelisted = await this.database.isWasmWhitelisted(
+            ownerStr,
+            config.wasmWhitelistAddresses
+          );
+          
+          if (isWhitelisted) {
+            logger.info(`Owner ${ownerStr} is whitelisted for WASM execution`);
+            wasmClient = createWasmClient();
+          } else {
+            logger.warn(`Owner ${ownerStr} is NOT whitelisted - WASM steps will be skipped`);
+          }
+        } else {
+          // Whitelist disabled - allow WASM for all
+          wasmClient = createWasmClient();
+        }
       }
       
       const result = await executeFromIpfs(
@@ -152,7 +178,7 @@ export class WorkflowSDKIntegration {
         false,
         accessToken,
         undefined, // dataRefContext - will be created
-        wasmClient || undefined,
+        wasmClient,
         db,
         undefined, // wasmRefContext - will be created
       );
@@ -218,14 +244,39 @@ export class WorkflowSDKIntegration {
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
       
-      // Create WASM client if available
-      const wasmClient = createWasmClient();
+      // Load workflow to get owner address for whitelist check
+      const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
       
-      // Ensure database is connected for WASM module lookup
+      // Check if owner is whitelisted for WASM execution
+      const config = getConfig();
+      let wasmClient: any = undefined;
       let db: Database | undefined;
+      
       if (this.database) {
         await this.database.connect();
         db = this.database;
+        
+        // Get owner address from workflow
+        const ownerAddress = (workflowData.owner as any)?.address || workflowData.owner;
+        const ownerStr = typeof ownerAddress === 'string' ? ownerAddress : String(ownerAddress);
+        
+        // Check whitelist if enabled
+        if (config.wasmWhitelistEnabled) {
+          const isWhitelisted = await this.database.isWasmWhitelisted(
+            ownerStr,
+            config.wasmWhitelistAddresses
+          );
+          
+          if (isWhitelisted) {
+            logger.info(`Owner ${ownerStr} is whitelisted for WASM execution`);
+            wasmClient = createWasmClient();
+          } else {
+            logger.warn(`Owner ${ownerStr} is NOT whitelisted - WASM steps will be skipped`);
+          }
+        } else {
+          // Whitelist disabled - allow WASM for all
+          wasmClient = createWasmClient();
+        }
       }
       
       const result = await executeFromIpfs(
@@ -238,7 +289,7 @@ export class WorkflowSDKIntegration {
         false,
         accessToken,
         undefined, // dataRefContext
-        wasmClient || undefined,
+        wasmClient,
         db,
         undefined, // wasmRefContext
       );

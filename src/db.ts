@@ -250,4 +250,29 @@ export class Database {
     );
     return count > 0;
   }
+
+  /**
+   * Check if an owner address is whitelisted for WASM execution
+   * Checks both environment variable whitelist and database collection
+   */
+  async isWasmWhitelisted(ownerAddress: string, configWhitelist?: string[]): Promise<boolean> {
+    if (!this.db) throw new Error('Database not connected');
+    
+    const normalizedOwner = ownerAddress.toLowerCase();
+    
+    // Check config whitelist first (from environment variable)
+    if (configWhitelist && configWhitelist.length > 0) {
+      if (configWhitelist.includes(normalizedOwner)) {
+        return true;
+      }
+    }
+    
+    // Check database whitelist collection
+    const whitelistDoc = await this.db.collection(COLLECTIONS.WASM_WHITELIST).findOne(
+      { owner: normalizedOwner, enabled: true },
+      { projection: { _id: 1 } }
+    );
+    
+    return !!whitelistDoc;
+  }
 }

@@ -33,6 +33,8 @@ export function getConfig() {
     othenticFlow: z.boolean(),
     operatorAddress: z.string(),
     wasmServerUrl: z.string().optional(),
+    wasmWhitelistEnabled: z.boolean(),
+    wasmWhitelistAddresses: z.array(z.string()).optional(),
   });
 
   const rpcUrls = Object.fromEntries(
@@ -89,6 +91,10 @@ export function getConfig() {
     aggregatorURL: process.env.AGGREGATOR_URL || 'http://localhost:8080',
     operatorAddress,
     wasmServerUrl: process.env.WASM_SERVER_URL || undefined,
+    wasmWhitelistEnabled: process.env.WASM_WHITELIST_ENABLED === 'true',
+    wasmWhitelistAddresses: process.env.WASM_WHITELIST_ADDRESSES
+      ? process.env.WASM_WHITELIST_ADDRESSES.split(',').map(addr => addr.trim().toLowerCase())
+      : undefined,
   } as const;
   return Object.freeze(schema.parse(cfg));
 }

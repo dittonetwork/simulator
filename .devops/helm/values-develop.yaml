@@ -135,6 +135,9 @@ env:
   AGGREGATOR_URL: "http://othentic-node-internal.epsilon.svc.cluster.local:8545"
   OTHENTIC_FLOW: "true"
   OTHENTIC_EXECUTOR_ADDRESS: "0xF177179963aA0EDE80Be4396d04d970171CF6a36"
+  WASM_SERVER_URL: "http://simulator-wasm-sandbox.epsilon.svc.cluster.local:8081"
+  WASM_WHITELIST_ENABLED: "true"
+  WASM_WHITELIST_ADDRESSES: "0x3813fc5E352e8b9e592a40BcC0BcC94F0cfFF6B3"
 
 # WASM Sandbox Configuration
 # Note: The WASM sandbox requires an image built from Dockerfile.wasmtime (includes wasmtime runtime).

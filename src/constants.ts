@@ -7,6 +7,7 @@ export const COLLECTIONS = Object.freeze({
   WORKFLOWS: 'workflows',
   CHAINS: 'chains',
   WASM_MODULES: 'wasm_modules',
+  WASM_WHITELIST: 'wasm_whitelist',
 });
 
 export const TRIGGER_TYPE = Object.freeze({
