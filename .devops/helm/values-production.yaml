@@ -193,13 +193,18 @@ wasmSandbox:
       memory: "512Mi"
       cpu: "1000m"
   
-  # Volume mounts for WASM cache (tmpfs)
+  # Volume mounts for WASM cache and temp directory (tmpfs)
   volumeMounts:
     - name: wasm-cache
       mountPath: /tmp/wasm-cache
+    - name: tmp-dir
+      mountPath: /tmp
   
   volumes:
     - name: wasm-cache
+      emptyDir:
+        sizeLimit: 128Mi
+    - name: tmp-dir
       emptyDir:
         sizeLimit: 128Mi
   
