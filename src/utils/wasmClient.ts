@@ -38,7 +38,14 @@ export class WasmClient {
    * Execute WASM code on the server
    */
   async run(request: WasmRunRequest): Promise<WasmRunResponse> {
-    const url = `${this.baseUrl}/run`;
+    // Ensure baseUrl ends with /wasm, append if needed
+    let baseUrl = this.baseUrl;
+    if (!baseUrl.endsWith('/wasm') && !baseUrl.endsWith('/wasm/')) {
+      // If baseUrl doesn't end with /wasm, check if it's a sandbox server
+      // Sandbox servers typically have endpoints at /wasm/run
+      baseUrl = `${baseUrl}/wasm`;
+    }
+    const url = `${baseUrl}/run`;
     
     // Parse URL to ensure proper formatting
     let urlObj: URL;
@@ -122,7 +129,12 @@ export class WasmClient {
    * Check if WASM server is healthy
    */
   async healthCheck(): Promise<boolean> {
-    const url = `${this.baseUrl}/health`;
+    // Ensure baseUrl ends with /wasm, append if needed
+    let baseUrl = this.baseUrl;
+    if (!baseUrl.endsWith('/wasm') && !baseUrl.endsWith('/wasm/')) {
+      baseUrl = `${baseUrl}/wasm`;
+    }
+    const url = `${baseUrl}/health`;
     
     return new Promise((resolve) => {
       const req = http.get(url, { timeout: 5000 }, (res) => {
