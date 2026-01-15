@@ -408,6 +408,27 @@ if (!wasmServerUrl) {
   logger.info(`Using external WASM server: ${wasmServerUrl}`);
 }
 
+// RPC proxy endpoint for WASM sandbox (only on simulator, not sandbox itself)
+if (!isSandboxMode) {
+  const { getRpcSimulator } = await import('./utils/rpcSimulator.js');
+  
+  app.post('/rpc/proxy', async (req, res) => {
+    try {
+      const simulator = getRpcSimulator();
+      const response = await simulator.execute(req.body);
+      res.json(response);
+    } catch (error) {
+      logger.error({ error }, 'RPC proxy error');
+      res.status(500).json({
+        jsonrpc: '2.0',
+        id: req.body?.id ?? null,
+        error: { code: -32000, message: 'RPC proxy error', data: (error as Error).message }
+      });
+    }
+  });
+  logger.info('RPC proxy endpoint available at POST /rpc/proxy');
+}
+
 let isShuttingDown = false;
 async function gracefulShutdown(signal: NodeJS.Signals) {
   if (isShuttingDown) return;

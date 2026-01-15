@@ -5,6 +5,9 @@ import path from "node:path";
 import crypto from "node:crypto";
 import os from "node:os";
 import express from "express";
+import { getLogger } from './logger.js';
+
+const logger = getLogger('WasmSandbox');
 
 type RunRequest = {
   jobId: string;
@@ -112,18 +115,20 @@ async function runWasmtimeOnce(params: {
   // Start RPC request processor in background
   // This processes RPC requests from guest WASM modules via file-based protocol
   let rpcProcessor: NodeJS.Timeout | null = null;
+  let rpcCallCount = 0;
   try {
     const { processWasmRpcRequests } = await import('./utils/wasmHostBridge.js');
+    logger.info({ workDir }, 'Starting RPC processor for WASM execution');
     rpcProcessor = setInterval(async () => {
       try {
         await processWasmRpcRequests(workDir);
+        rpcCallCount++;
       } catch (error) {
-        console.error('RPC processor error:', error);
+        logger.error({ error, workDir, rpcCallCount }, 'RPC processor error');
       }
     }, 50); // Check every 50ms (reduced frequency to avoid overwhelming)
   } catch (error) {
-    // If RPC bridge fails to load, continue without it
-    // Guest modules won't be able to make RPC calls, but execution continues
+    logger.error({ error }, 'Failed to load RPC bridge - WASM modules will not be able to make RPC calls');
   }
 
   let stdout = Buffer.alloc(0);
@@ -177,13 +182,26 @@ async function runWasmtimeOnce(params: {
 
   const stderrStr = stderr.toString("utf8");
 
+  logger.info({ 
+    wasmPath: params.wasmPath,
+    killedByTimeout, 
+    killedForOutputLimit,
+    exitCode: child.exitCode,
+    stdoutLen: stdout.length,
+    stderrLen: stderr.length,
+    rpcCallCount,
+  }, 'WASM execution finished');
+
   if (killedForOutputLimit) {
+    logger.warn({ wasmPath: params.wasmPath }, 'WASM killed: stdout/stderr size limit exceeded');
     return { ok: false, error: "killed: stdout/stderr size limit exceeded", stderr: stderrStr };
   }
   if (killedByTimeout) {
+    logger.warn({ wasmPath: params.wasmPath, timeoutMs: params.timeoutMs }, 'WASM killed: timeout');
     return { ok: false, error: `timeout after ${params.timeoutMs}ms`, stderr: stderrStr };
   }
   if (child.exitCode !== 0) {
+    logger.warn({ wasmPath: params.wasmPath, exitCode: child.exitCode, stderr: stderrStr }, 'WASM exited with non-zero code');
     return { ok: false, error: `exit code ${child.exitCode}`, stderr: stderrStr };
   }
 
@@ -200,8 +218,10 @@ async function runWasmtimeOnce(params: {
 
   try {
     const parsed = JSON.parse(line);
+    logger.info({ wasmPath: params.wasmPath, resultKeys: Object.keys(parsed || {}) }, 'WASM execution successful');
     return { ok: true, result: parsed, stderr: stderrStr };
   } catch (e) {
+    logger.error({ wasmPath: params.wasmPath, stdout: line.substring(0, 500) }, 'WASM stdout is not valid JSON');
     return { ok: false, error: `stdout is not JSON: ${(e as Error).message}`, stderr: stderrStr };
   }
 }
@@ -315,6 +335,8 @@ export async function wasmRunHandler(req: express.Request, res: express.Response
     // Express has already parsed the body, so we can use it directly
     const body = req.body as RunRequest;
     jobId = body.jobId ?? "unknown";
+    
+    logger.info({ jobId, wasmHash: body.wasmHash, timeoutMs: body.timeoutMs, inputKeys: Object.keys(body.input || {}) }, 'Received WASM run request');
 
     if (!body.jobId || typeof body.wasmB64 !== "string" || typeof body.timeoutMs !== "number") {
       const resp: RunResponse = { jobId, ok: false, error: "bad request", durationMs: Date.now() - started };

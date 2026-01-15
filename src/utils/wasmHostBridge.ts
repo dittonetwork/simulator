@@ -6,11 +6,16 @@
  * 
  * The guest WASM module can write RPC requests to a file, and the host
  * processes them and writes responses back.
+ * 
+ * RPC calls can be handled in two ways:
+ * 1. Direct mode: Uses local RpcSimulator (when RPC_URL_X env vars are set)
+ * 2. Proxy mode: Proxies through simulator (when RPC_PROXY_URL is set)
  */
 
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { getRpcSimulator, type JsonRpcRequest, type JsonRpcResponse } from './rpcSimulator.js';
+import http from 'node:http';
+import https from 'node:https';
 import { getLogger } from '../logger.js';
 
 const logger = getLogger('WasmHostBridge');
@@ -21,11 +26,76 @@ const MAX_REQUEST_SIZE = 64 * 1024; // 64KB
 const MAX_RESPONSE_SIZE = 1024 * 1024; // 1MB
 const RPC_TIMEOUT_MS = 5000; // 5 seconds - network RPC calls need time
 
+// RPC proxy URL (if set, use proxy mode instead of direct RPC)
+const RPC_PROXY_URL = process.env.RPC_PROXY_URL;
+
+interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id: number | string;
+  method: string;
+  params?: unknown[];
+}
+
+interface JsonRpcResponse {
+  jsonrpc: '2.0';
+  id: number | string | null;
+  result?: unknown;
+  error?: { code: number; message: string; data?: unknown };
+}
+
+/**
+ * Execute RPC via proxy URL
+ */
+async function executeViaProxy(request: JsonRpcRequest): Promise<JsonRpcResponse> {
+  if (!RPC_PROXY_URL) {
+    throw new Error('RPC_PROXY_URL not set');
+  }
+
+  const url = new URL(RPC_PROXY_URL);
+  const isHttps = url.protocol === 'https:';
+  
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(request);
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+      timeout: RPC_TIMEOUT_MS,
+    };
+
+    const req = (isHttps ? https : http).request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data) as JsonRpcResponse);
+        } catch (error) {
+          reject(new Error(`Invalid JSON from proxy: ${data.substring(0, 200)}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`RPC proxy timeout after ${RPC_TIMEOUT_MS}ms`));
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
+
 /**
  * Process RPC requests from guest WASM module
  * 
  * This function reads RPC requests from a file (written by guest),
- * processes them via the simulator, and writes responses back.
+ * processes them via the simulator (direct or proxy), and writes responses back.
  */
 export async function processWasmRpcRequests(workDir: string): Promise<void> {
   const requestPath = join(workDir, RPC_REQUEST_FILE);
@@ -40,10 +110,7 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
       return;
     }
 
-    logger.info(`Processing RPC request from ${requestPath}`);
-    
-    // Get simulator lazily to allow proper initialization
-    const simulator = getRpcSimulator();
+    logger.info({ requestPath, proxyMode: !!RPC_PROXY_URL }, 'Processing RPC request');
 
     // Read request
     const requestData = await fs.readFile(requestPath, 'utf-8');
@@ -80,25 +147,58 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
       return;
     }
 
-    // Execute with timeout
-    const timeoutPromise = new Promise<JsonRpcResponse>((resolve) => {
-      setTimeout(() => {
-        resolve({
+    logger.info({ method: request.method, params: JSON.stringify(request.params || []).substring(0, 200) }, 'Executing RPC method');
+    
+    let response: JsonRpcResponse;
+    
+    if (RPC_PROXY_URL) {
+      // Proxy mode: call simulator's /rpc/proxy endpoint
+      logger.info({ proxyUrl: RPC_PROXY_URL }, 'Using RPC proxy mode');
+      try {
+        response = await executeViaProxy(request);
+        logger.info({ method: request.method, hasError: !!response.error }, 'RPC proxy call completed');
+      } catch (error) {
+        logger.error({ error, method: request.method }, 'RPC proxy call failed');
+        response = {
           jsonrpc: '2.0' as const,
           id: request.id ?? null,
           error: {
             code: -32000,
             message: 'Server error',
-            data: `RPC call timeout after ${RPC_TIMEOUT_MS}ms`,
+            data: (error as Error).message,
           },
-        });
-      }, RPC_TIMEOUT_MS);
-    });
+        };
+      }
+    } else {
+      // Direct mode: use local RpcSimulator
+      const { getRpcSimulator } = await import('./rpcSimulator.js');
+      const simulator = getRpcSimulator();
+      
+      // Execute with timeout
+      let timedOut = false;
+      const timeoutPromise = new Promise<JsonRpcResponse>((resolve) => {
+        setTimeout(() => {
+          timedOut = true;
+          logger.warn({ method: request.method, timeoutMs: RPC_TIMEOUT_MS }, 'RPC call timeout');
+          resolve({
+            jsonrpc: '2.0' as const,
+            id: request.id ?? null,
+            error: {
+              code: -32000,
+              message: 'Server error',
+              data: `RPC call timeout after ${RPC_TIMEOUT_MS}ms`,
+            },
+          });
+        }, RPC_TIMEOUT_MS);
+      });
 
-    logger.info(`Executing RPC method: ${request.method}`);
-    const executePromise = simulator.execute(request);
-
-    const response = await Promise.race([executePromise, timeoutPromise]);
+      const executePromise = simulator.execute(request);
+      response = await Promise.race([executePromise, timeoutPromise]);
+      
+      if (!timedOut) {
+        logger.info({ method: request.method, hasError: !!response.error }, 'Direct RPC call completed');
+      }
+    }
     logger.info(`RPC response: ${JSON.stringify(response).substring(0, 200)}`);
 
     // Validate response size

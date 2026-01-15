@@ -6,7 +6,7 @@
  */
 
 import { createPublicClient, http, type PublicClient, type Address, type Hex } from 'viem';
-import { getConfig } from '../config.js';
+import { mainnet, sepolia, baseSepolia, base } from 'viem/chains';
 import { getLogger } from '../logger.js';
 import { authHttpConfig } from './httpTransport.js';
 
@@ -78,54 +78,53 @@ export interface RpcSimulator {
  */
 export class DefaultRpcSimulator implements RpcSimulator {
   private clients: Map<number, PublicClient> = new Map();
-  private defaultChainId: number;
+  private defaultChainId: number = 0;
 
   constructor() {
-    const cfg = getConfig();
-    this.defaultChainId = cfg.chains ? Number(Object.keys(cfg.chains)[0]) : 1;
+    // Minimal config - read RPC URLs directly from env vars (no getConfig() needed)
+    // This allows sandbox to work without full simulator config
+    const chainConfigs: { id: number; chain: any; envKey: string }[] = [
+      { id: 1, chain: mainnet, envKey: 'RPC_URL_1' },
+      { id: 11155111, chain: sepolia, envKey: 'RPC_URL_11155111' },
+      { id: 84532, chain: baseSepolia, envKey: 'RPC_URL_84532' },
+      { id: 8453, chain: base, envKey: 'RPC_URL_8453' },
+    ];
 
-    // Initialize clients for all configured chains
-    if (cfg.chains && cfg.rpcUrls) {
-      Object.entries(cfg.chains).forEach(([chainIdStr, chainObj]) => {
-        const chainId = Number(chainIdStr);
-        const rpcUrl = (cfg.rpcUrls as Record<number, string>)[chainId];
-        if (rpcUrl) {
-          this.clients.set(
-            chainId,
-            createPublicClient({
-              chain: chainObj as any,
-              transport: http(rpcUrl, authHttpConfig()),
-            }) as any as PublicClient
-          );
+    const configuredChains: string[] = [];
+    for (const { id, chain, envKey } of chainConfigs) {
+      const rpcUrl = process.env[envKey];
+      if (rpcUrl) {
+        this.clients.set(
+          id,
+          createPublicClient({
+            chain,
+            transport: http(rpcUrl, authHttpConfig()),
+          }) as PublicClient
+        );
+        configuredChains.push(`${id}=${rpcUrl.substring(0, 30)}...`);
+        if (!this.defaultChainId) {
+          this.defaultChainId = id;
         }
-      });
+      }
     }
 
-    logger.info(`RpcSimulator initialized with ${this.clients.size} chain(s), default: ${this.defaultChainId}`);
+    if (this.clients.size === 0) {
+      logger.warn('RpcSimulator: No RPC URLs configured! Set RPC_URL_1, RPC_URL_11155111, etc.');
+      this.defaultChainId = 1; // fallback
+    } else {
+      logger.info({ configuredChains, defaultChainId: this.defaultChainId }, `RpcSimulator initialized with ${this.clients.size} chain(s)`);
+    }
   }
 
   /**
-   * Get or create a client for a specific chain ID
+   * Get client for a specific chain ID
    */
   private getClient(chainId?: number): PublicClient {
     const targetChainId = chainId || this.defaultChainId;
-    let client = this.clients.get(targetChainId);
+    const client = this.clients.get(targetChainId);
     
     if (!client) {
-      // Fallback: try to get from config
-      const cfg = getConfig();
-      const chainObj = cfg.chains?.[targetChainId];
-      const rpcUrl = cfg.rpcUrls?.[targetChainId];
-      
-      if (chainObj && rpcUrl) {
-        client = createPublicClient({
-          chain: chainObj as any,
-          transport: http(rpcUrl, authHttpConfig()),
-        }) as any as PublicClient;
-        this.clients.set(targetChainId, client);
-      } else {
-        throw new Error(`No RPC client configured for chain ${targetChainId}`);
-      }
+      throw new Error(`No RPC client configured for chain ${targetChainId}. Set RPC_URL_${targetChainId} env var.`);
     }
     
     return client;
@@ -174,9 +173,13 @@ export class DefaultRpcSimulator implements RpcSimulator {
       // Validate method is allowed
       this.validateMethod(request.method);
 
+      logger.info({ method: request.method, chainId: this.defaultChainId }, 'Calling external RPC');
+      
       // Execute the method
       const result = await this.executeMethod(request.method, request.params || []);
 
+      logger.info({ method: request.method, resultPreview: JSON.stringify(result).substring(0, 100) }, 'External RPC call completed');
+      
       return {
         jsonrpc: '2.0',
         id: request.id,

@@ -155,21 +155,19 @@ wasmSandbox:
     type: ClusterIP
     port: 8081
   
-  # Environment variables for WASM sandbox
+  # Environment variables for WASM sandbox (minimal - only what sandbox needs)
   env:
     PORT: "8081"
     HTTP_PORT: "8081"
-    API_ONLY: "true"
     WASM_CACHE_DIR: "/tmp/wasm-cache"
+    # Execution limits
     MAX_BODY_BYTES: "12582912"  # 12MB
     MAX_WASM_BYTES: "10485760"  # 10MB
     MAX_STDOUT_BYTES: "262144"  # 256KB
     MAX_STDERR_BYTES: "262144"  # 256KB
-    MAX_TIMEOUT_MS: "2000"
-    IPFS_SERVICE_URL: "https://ipfs-service.dittonetwork.io"
-  
-  # Secret name for RPC URLs (will use simulator-env secret)
-  secretName: simulator-env
+    MAX_TIMEOUT_MS: "5000"      # 5s for RPC calls
+    # RPC proxy through simulator (sandbox has no direct external network access)
+    RPC_PROXY_URL: "http://simulator.epsilon.svc.cluster.local:8080/rpc/proxy"
   
   # Security context for WASM sandbox (read-only root filesystem recommended)
   podSecurityContext:
