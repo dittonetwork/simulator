@@ -118,9 +118,9 @@ async function runWasmtimeOnce(params: {
       try {
         await processWasmRpcRequests(workDir);
       } catch (error) {
-        // Ignore errors in background processor
+        console.error('RPC processor error:', error);
       }
-    }, 10); // Check every 10ms
+    }, 50); // Check every 50ms (reduced frequency to avoid overwhelming)
   } catch (error) {
     // If RPC bridge fails to load, continue without it
     // Guest modules won't be able to make RPC calls, but execution continues

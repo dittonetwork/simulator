@@ -19,7 +19,7 @@ const RPC_REQUEST_FILE = 'wasm_rpc_request.json';
 const RPC_RESPONSE_FILE = 'wasm_rpc_response.json';
 const MAX_REQUEST_SIZE = 64 * 1024; // 64KB
 const MAX_RESPONSE_SIZE = 1024 * 1024; // 1MB
-const RPC_TIMEOUT_MS = 200; // 200ms
+const RPC_TIMEOUT_MS = 5000; // 5 seconds - network RPC calls need time
 
 /**
  * Process RPC requests from guest WASM module
@@ -30,8 +30,7 @@ const RPC_TIMEOUT_MS = 200; // 200ms
 export async function processWasmRpcRequests(workDir: string): Promise<void> {
   const requestPath = join(workDir, RPC_REQUEST_FILE);
   const responsePath = join(workDir, RPC_RESPONSE_FILE);
-  const simulator = getRpcSimulator();
-
+  
   try {
     // Check if request file exists
     try {
@@ -41,8 +40,14 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
       return;
     }
 
+    logger.info(`Processing RPC request from ${requestPath}`);
+    
+    // Get simulator lazily to allow proper initialization
+    const simulator = getRpcSimulator();
+
     // Read request
     const requestData = await fs.readFile(requestPath, 'utf-8');
+    logger.info(`RPC request data: ${requestData.substring(0, 200)}`);
     
     if (requestData.length > MAX_REQUEST_SIZE) {
       const errorResponse: JsonRpcResponse = {
@@ -90,9 +95,11 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
       }, RPC_TIMEOUT_MS);
     });
 
+    logger.info(`Executing RPC method: ${request.method}`);
     const executePromise = simulator.execute(request);
 
     const response = await Promise.race([executePromise, timeoutPromise]);
+    logger.info(`RPC response: ${JSON.stringify(response).substring(0, 200)}`);
 
     // Validate response size
     const responseStr = JSON.stringify(response);
