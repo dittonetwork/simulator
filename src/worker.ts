@@ -297,6 +297,10 @@ class WorkflowProcessor {
       if (!this.workflow.meta) {
         throw new Error('Workflow data not available in meta field');
       }
+      
+      // Reuse WASM context from simulation to avoid re-executing WASM steps
+      // This ensures WASM is only executed once (during simulation)
+      const wasmRefContext = simulationResult.wasmRefContext;
 
       const executionResult = await this.workflowSDK.executeWorkflow(
         this.workflow.meta.workflow,
@@ -304,6 +308,7 @@ class WorkflowProcessor {
         this.isProd,
         this.ipfsServiceUrl,
         reportingClient.getAccessToken() || undefined,
+        wasmRefContext, // Reuse WASM context from simulation
       );
 
       // Check execution result for AA23 validation error
@@ -653,14 +658,19 @@ class WorkflowProcessor {
 
     for (const result of simulationResult.results as any[]) {
       const nextSimPart = (result.nextSimulationTime ?? Date.now()).toString();
-      // Include dataRefContext hash in proofOfTask for deterministic consensus
-      // Operators will use this to verify they get the same results on the same blocks
+      // Include dataRefContext and wasmRefContext hashes in proofOfTask for deterministic consensus
+      // Operators will use this to verify they get the same results on the same blocks and WASM results
       const dataRefHash = simulationResult.dataRefContextSerialized 
         ? keccak256(AbiCoder.defaultAbiCoder().encode(['string'], [simulationResult.dataRefContextSerialized])).slice(0, 18)
         : '';
-      const proofOfTask = dataRefHash 
-        ? `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}_${dataRefHash}`
-        : `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
+      const wasmRefHash = simulationResult.wasmRefContextSerialized 
+        ? keccak256(AbiCoder.defaultAbiCoder().encode(['string'], [simulationResult.wasmRefContextSerialized])).slice(0, 18)
+        : '';
+      
+      // Build proofOfTask with context hashes: ipfsHash_nextSim_chainId_dataRefHash_wasmRefHash
+      let proofOfTask = `${this.workflow.ipfs_hash}_${nextSimPart}_${result.chainId}`;
+      if (dataRefHash) proofOfTask += `_${dataRefHash}`;
+      if (wasmRefHash) proofOfTask += `_${wasmRefHash}`;
       const taskDefinitionId = 1;
       const performerAddress = config.othenticExecutorAddress as `0x${string}`;
       const targetChainId = result.chainId;
@@ -729,6 +739,13 @@ class WorkflowProcessor {
         if (simulationResult.dataRefContextSerialized) {
           taskParams.push(simulationResult.dataRefContextSerialized);
           this.log(`Including dataRefContext in task params for deterministic consensus`);
+        }
+        
+        // Add wasmRefContext as optional 9th parameter if present
+        // Operators will use this to reuse WASM results instead of re-executing WASM
+        if (simulationResult.wasmRefContextSerialized) {
+          taskParams.push(simulationResult.wasmRefContextSerialized);
+          this.log(`Including WASM context in task params: ${simulationResult.wasmRefContextSerialized.length} bytes`);
         }
         
         const response = await fetch(config.aggregatorURL, {

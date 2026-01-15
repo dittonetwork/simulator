@@ -7,6 +7,7 @@ import { getConfig } from './config.js';
 import EventMonitor from './eventMonitor.js';
 import { bigIntToString } from './utils.js';
 import { createWasmClient, WasmClient } from './utils/wasmClient.js';
+import { deserializeDataRefContext, deserializeWasmRefContext } from '@ditto/workflow-sdk';
 
 const logger = getLogger('ValidateAPI');
 const router: Router = Router();
@@ -129,8 +130,13 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       return res.status(200).json({ data: false, error: true, message: 'proofOfTask is required and must be a string' });
     }
 
-    // proofOfTask format: "ipfsHash_nextSimulationTime_chainID"
-    const [ipfsHash, nextSimulationTimeStr, chainIdStr] = String(proofOfTask).split('_');
+    // proofOfTask format: "ipfsHash_nextSimulationTime_chainID[_dataRefHash][_wasmRefHash]"
+    // Parse proofOfTask - may include optional context hashes
+    const parts = String(proofOfTask).split('_');
+    const ipfsHash = parts[0];
+    const nextSimulationTimeStr = parts[1];
+    const chainIdStr = parts[2];
+    // Optional: parts[3] = dataRefHash, parts[4] = wasmRefHash
     if (!ipfsHash) {
       logger.warn('[ValidateAPI] Invalid proofOfTask: missing ipfsHash');
       return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: missing ipfsHash' });
@@ -205,12 +211,44 @@ router.post('/task/validate', async (req: Request, res: Response) => {
     await reportingClient.initialize();
     const accessToken = reportingClient.getAccessToken();
     const workflowData = await sdk.loadWorkflowData(ipfsHash);
+    
+    // Extract contexts from request body if provided (operator mode - reuse leader's contexts)
+    // This ensures operators don't re-execute WASM or use different block numbers
+    const dataRefContextSerialized = (req.body as any).dataRefContextSerialized;
+    const wasmRefContextSerialized = (req.body as any).wasmRefContextSerialized;
+    
+    let dataRefContext = undefined;
+    let wasmRefContext = undefined;
+    
+    if (dataRefContextSerialized && typeof dataRefContextSerialized === 'string') {
+      try {
+        dataRefContext = deserializeDataRefContext(dataRefContextSerialized);
+        logger.info(`[ValidateAPI] Using provided dataRefContext (operator mode)`);
+      } catch (error) {
+        logger.warn({ error }, `[ValidateAPI] Failed to deserialize dataRefContext, will create new context`);
+      }
+    }
+    
+    if (wasmRefContextSerialized && typeof wasmRefContextSerialized === 'string') {
+      try {
+        wasmRefContext = deserializeWasmRefContext(wasmRefContextSerialized);
+        logger.info(`[ValidateAPI] Using provided wasmRefContext (operator mode) - ${wasmRefContext.resolvedRefs.length} WASM results`);
+      } catch (error) {
+        logger.warn({ error }, `[ValidateAPI] Failed to deserialize wasmRefContext, will execute WASM fresh`);
+      }
+    }
+    
+    // Operators simulate with leader's contexts to ensure deterministic consensus
+    // If contexts provided, operators reuse leader's WASM results and block numbers
+    // If not provided, operators execute fresh (fallback for backward compatibility)
     const simulationResult = await sdk.simulateWorkflow(
       workflowData,
       ipfsHash,
       isProd,
       ipfsServiceUrl,
       accessToken || undefined,
+      dataRefContext,
+      wasmRefContext,
     );
 
     try {

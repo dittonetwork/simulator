@@ -7,6 +7,7 @@ import {
   type DataRefContext,
   serializeDataRefContext,
   type WasmRefContext,
+  serializeWasmRefContext,
 } from '@ditto/workflow-sdk';
 import { createWasmClient } from '../utils/wasmClient.js';
 import { Database } from '../db.js';
@@ -48,6 +49,13 @@ export interface SimulationResult {
   dataRefContext?: DataRefContext;
   /** Serialized dataRefContext for easy transmission */
   dataRefContextSerialized?: string;
+  /** 
+   * WASM ref context for deterministic consensus.
+   * Contains WASM execution results - operators must use same results.
+   */
+  wasmRefContext?: WasmRefContext;
+  /** Serialized wasmRefContext for easy transmission */
+  wasmRefContextSerialized?: string;
 }
 
 export interface ExecutionResult {
@@ -113,6 +121,9 @@ export class WorkflowSDKIntegration {
    * 
    * Returns dataRefContext with block numbers for deterministic consensus.
    * Pass this context to operators so they can reproduce the same read-calls.
+   * 
+   * @param dataRefContext - Optional context from leader (operator mode) - uses same block numbers
+   * @param wasmRefContext - Optional WASM context from leader (operator mode) - reuses WASM results
    */
   async simulateWorkflow(
     _workflowData: Workflow,
@@ -120,6 +131,8 @@ export class WorkflowSDKIntegration {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    dataRefContext?: DataRefContext,
+    wasmRefContext?: WasmRefContext,
   ): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
@@ -168,6 +181,7 @@ export class WorkflowSDKIntegration {
         }
       }
       
+      // Use provided contexts if available (operator mode), otherwise create new (leader mode)
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
@@ -177,10 +191,10 @@ export class WorkflowSDKIntegration {
         true,
         false,
         accessToken,
-        undefined, // dataRefContext - will be created
+        dataRefContext, // Use provided context (operator) or create new (leader)
         wasmClient,
         db,
-        undefined, // wasmRefContext - will be created
+        wasmRefContext, // Use provided WASM context (operator) or create new (leader)
       );
 
       logger.info(`Simulation completed successfully`);
@@ -210,17 +224,23 @@ export class WorkflowSDKIntegration {
         }
       });
 
-      // Build simulation result with dataRefContext
+      // Build simulation result with dataRefContext and wasmRefContext
       const simResult: SimulationResult = {
         success: result.success,
         results: result.results as any,
         markRunHash: result.markRunHash,
         dataRefContext: result.dataRefContext,
+        wasmRefContext: result.wasmRefContext,
       };
       
-      // Add serialized context for easy transmission to operators
+      // Add serialized contexts for easy transmission to operators
       if (result.dataRefContext && result.dataRefContext.resolvedRefs.length > 0) {
         simResult.dataRefContextSerialized = serializeDataRefContext(result.dataRefContext);
+      }
+      
+      if (result.wasmRefContext && result.wasmRefContext.resolvedRefs.length > 0) {
+        simResult.wasmRefContextSerialized = serializeWasmRefContext(result.wasmRefContext);
+        logger.info(`- WASM ref context: ${result.wasmRefContext.resolvedRefs.length} resolved refs`);
       }
 
       return simResult;
@@ -232,6 +252,7 @@ export class WorkflowSDKIntegration {
 
   /**
    * Execute workflow using stored workflow data
+   * @param wasmRefContext - Optional WASM context from simulation to avoid re-executing WASM steps
    */
   async executeWorkflow(
     _workflowData: Workflow,
@@ -239,6 +260,7 @@ export class WorkflowSDKIntegration {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    wasmRefContext?: WasmRefContext,
   ): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
@@ -279,6 +301,9 @@ export class WorkflowSDKIntegration {
         }
       }
       
+      // Reuse WASM context from simulation to avoid re-executing WASM steps
+      // This ensures WASM is only executed once (during simulation) and reused in execution
+      // In Othentic flow, operators will receive wasmRefContext from leader's simulation
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
@@ -288,10 +313,10 @@ export class WorkflowSDKIntegration {
         false,
         false,
         accessToken,
-        undefined, // dataRefContext
+        undefined, // dataRefContext - could be passed from simulation if needed
         wasmClient,
         db,
-        undefined, // wasmRefContext
+        wasmRefContext, // Reuse WASM context from simulation - operators will get it from leader
       );
 
       logger.info(`Execution completed successfully`);
@@ -415,8 +440,10 @@ export class WorkflowSDKService {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    dataRefContext?: DataRefContext,
+    wasmRefContext?: WasmRefContext,
   ) {
-    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken);
+    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken, dataRefContext, wasmRefContext);
   }
 
   executeWorkflow(
@@ -425,8 +452,9 @@ export class WorkflowSDKService {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    wasmRefContext?: WasmRefContext,
   ) {
-    return this.integration.executeWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken);
+    return this.integration.executeWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken, wasmRefContext);
   }
 
   processWorkflow(ipfsHash: string, prodContract: boolean, ipfsServiceUrl: string) {
