@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { URL } from 'node:url';
 import { getLogger } from '../logger.js';
 
 const logger = getLogger('WasmClient');
@@ -39,9 +40,21 @@ export class WasmClient {
   async run(request: WasmRunRequest): Promise<WasmRunResponse> {
     const url = `${this.baseUrl}/run`;
     
+    // Parse URL to ensure proper formatting
+    let urlObj: URL;
+    try {
+      urlObj = new URL(url);
+    } catch (error) {
+      logger.error({ error, url }, 'Invalid WASM server URL');
+      throw new Error(`Invalid WASM server URL: ${url}`);
+    }
+    
     return new Promise((resolve, reject) => {
       const body = JSON.stringify(request);
       const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+        path: urlObj.pathname,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,7 +62,7 @@ export class WasmClient {
         },
       };
 
-      const req = http.request(url, options, (res) => {
+      const req = http.request(options, (res) => {
         let data = '';
 
         res.on('data', (chunk) => {
@@ -57,12 +70,32 @@ export class WasmClient {
         });
 
         res.on('end', () => {
+          // Check if response is successful
+          if (res.statusCode && res.statusCode >= 400) {
+            const errorPreview = data.substring(0, 200);
+            logger.error({ 
+              statusCode: res.statusCode, 
+              statusMessage: res.statusMessage,
+              url,
+              responsePreview: errorPreview 
+            }, 'WASM server returned error status');
+            reject(new Error(`WASM server error ${res.statusCode}: ${res.statusMessage}. Response: ${errorPreview}`));
+            return;
+          }
+
+          // Check if response is HTML (error page)
+          if (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html')) {
+            logger.error({ url, responsePreview: data.substring(0, 500) }, 'WASM server returned HTML instead of JSON');
+            reject(new Error(`WASM server returned HTML (likely 404 or error page). Check that endpoint ${url} exists. Response preview: ${data.substring(0, 200)}`));
+            return;
+          }
+
           try {
             const response = JSON.parse(data) as WasmRunResponse;
             resolve(response);
           } catch (error) {
-            logger.error({ error, data }, 'Failed to parse WASM server response');
-            reject(new Error(`Invalid JSON response from WASM server: ${(error as Error).message}`));
+            logger.error({ error, data: data.substring(0, 500), url, statusCode: res.statusCode }, 'Failed to parse WASM server response');
+            reject(new Error(`Invalid JSON response from WASM server: ${(error as Error).message}. Response preview: ${data.substring(0, 200)}`));
           }
         });
       });

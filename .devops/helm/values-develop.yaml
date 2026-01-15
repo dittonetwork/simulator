@@ -147,7 +147,7 @@ env:
 # - simulator-wasmtime:1.16.0 (from Dockerfile.wasmtime)
 wasmSandbox:
   enabled: true
-  replicaCount: 2
+  replicaCount: 1
   
   image:
     repository: 847647377987.dkr.ecr.eu-central-1.amazonaws.com/epsilon/simulator-wasmtime
