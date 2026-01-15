@@ -59,9 +59,8 @@ COPY --from=build /app/ditto-workflow-sdk ./ditto-workflow-sdk
 RUN useradd -u 10001 -m runner
 USER 10001
 
-ENV PORT=8080
-ENV HTTP_PORT=8080
-ENV API_ONLY=true
-EXPOSE 8080
+ENV PORT=8081
+ENV HTTP_PORT=8081
+EXPOSE 8081
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/sandbox.js"]
