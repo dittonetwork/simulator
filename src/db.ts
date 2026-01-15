@@ -227,13 +227,28 @@ export class Database {
       return null;
     }
     
-    // Handle both Buffer and Binary types from MongoDB
+    // Handle Buffer type
     if (Buffer.isBuffer(doc.bytes)) {
       return doc.bytes;
     }
+    
+    // Handle MongoDB Binary type
     if (doc.bytes && typeof doc.bytes.buffer === 'object') {
-      // MongoDB Binary type
       return Buffer.from(doc.bytes.buffer);
+    }
+    
+    // Handle base64 string (common storage format)
+    if (typeof doc.bytes === 'string') {
+      try {
+        return Buffer.from(doc.bytes, 'base64');
+      } catch (error) {
+        // If base64 decode fails, try treating as hex
+        try {
+          return Buffer.from(doc.bytes, 'hex');
+        } catch {
+          return null;
+        }
+      }
     }
     
     return null;
