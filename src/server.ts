@@ -90,13 +90,12 @@ async function runWasmtimeOnce(params: {
   // Set wasmtime cache to /tmp to avoid read-only filesystem issues
   // Invoke the 'run' function exported by the WASM module
   // Pre-open the work directory for WASI file access (required for WASM modules)
-  // Using --dir to pre-open the directory (read-write access)
-  // Pass environment variables to WASM module using --env flags
+  // Map host workDir to /rpc inside WASI so WASM module can use consistent paths
   const wasmtimeArgs = [
     "run",
     "--invoke", "run",
-    "--dir", workDir, // Pre-open work directory for WASI access
-    "--env", `WASM_RPC_WORK_DIR=${workDir}`, // Pass work dir path for reference
+    "--dir", `${workDir}::/rpc`, // Map workDir to /rpc inside WASI
+    "--env", "WASM_RPC_WORK_DIR=/rpc", // WASM should use /rpc path
     "--env", "WASM_RPC_REQUEST_FILE=wasm_rpc_request.json",
     "--env", "WASM_RPC_RESPONSE_FILE=wasm_rpc_response.json",
     params.wasmPath,
@@ -116,17 +115,29 @@ async function runWasmtimeOnce(params: {
   // This processes RPC requests from guest WASM modules via file-based protocol
   let rpcProcessor: NodeJS.Timeout | null = null;
   let rpcCallCount = 0;
+  let rpcProcessedCount = 0;
   try {
     const { processWasmRpcRequests } = await import('./utils/wasmHostBridge.js');
-    logger.info({ workDir }, 'Starting RPC processor for WASM execution');
+    logger.info({ workDir, wasiPath: '/rpc' }, 'Starting RPC processor for WASM execution');
+    
+    // Check for request file existence on each tick
     rpcProcessor = setInterval(async () => {
       try {
-        await processWasmRpcRequests(workDir);
         rpcCallCount++;
+        // Check if request file exists
+        const requestPath = `${workDir}/wasm_rpc_request.json`;
+        try {
+          await fs.access(requestPath);
+          logger.info({ requestPath, tick: rpcCallCount }, 'Found RPC request file');
+          rpcProcessedCount++;
+        } catch {
+          // No file yet, that's OK
+        }
+        await processWasmRpcRequests(workDir);
       } catch (error) {
         logger.error({ error, workDir, rpcCallCount }, 'RPC processor error');
       }
-    }, 50); // Check every 50ms (reduced frequency to avoid overwhelming)
+    }, 20); // Check every 20ms for faster response
   } catch (error) {
     logger.error({ error }, 'Failed to load RPC bridge - WASM modules will not be able to make RPC calls');
   }
@@ -189,7 +200,9 @@ async function runWasmtimeOnce(params: {
     exitCode: child.exitCode,
     stdoutLen: stdout.length,
     stderrLen: stderr.length,
-    rpcCallCount,
+    rpcTicks: rpcCallCount,
+    rpcProcessed: rpcProcessedCount,
+    workDir,
   }, 'WASM execution finished');
 
   if (killedForOutputLimit) {
