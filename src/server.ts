@@ -89,13 +89,13 @@ async function runWasmtimeOnce(params: {
   
   // Set wasmtime cache to /tmp to avoid read-only filesystem issues
   // Invoke the 'run' function exported by the WASM module
-  // Pre-open the work directory for WASI file access (required for WASM modules)
-  // Map host workDir to /rpc inside WASI so WASM module can use consistent paths
+  // Pre-open the work directory for WASI file access
+  // Note: wasmtime v27+ uses --dir HOST::GUEST syntax, or just --dir HOST for same path
   const wasmtimeArgs = [
     "run",
     "--invoke", "run",
-    "--dir", `${workDir}::/rpc`, // Map workDir to /rpc inside WASI
-    "--env", "WASM_RPC_WORK_DIR=/rpc", // WASM should use /rpc path
+    "--dir", workDir, // Pre-open workDir, accessible as the same path in WASI
+    "--env", `WASM_RPC_WORK_DIR=${workDir}`, // WASM uses the same host path
     "--env", "WASM_RPC_REQUEST_FILE=wasm_rpc_request.json",
     "--env", "WASM_RPC_RESPONSE_FILE=wasm_rpc_response.json",
     params.wasmPath,
@@ -118,7 +118,7 @@ async function runWasmtimeOnce(params: {
   let rpcProcessedCount = 0;
   try {
     const { processWasmRpcRequests } = await import('./utils/wasmHostBridge.js');
-    logger.info({ workDir, wasiPath: '/rpc' }, 'Starting RPC processor for WASM execution');
+    logger.info({ workDir }, 'Starting RPC processor for WASM execution');
     
     // Check for request file existence on each tick
     rpcProcessor = setInterval(async () => {
