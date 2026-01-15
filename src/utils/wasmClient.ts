@@ -51,9 +51,10 @@ export class WasmClient {
     
     return new Promise((resolve, reject) => {
       const body = JSON.stringify(request);
+      const port = urlObj.port ? parseInt(urlObj.port, 10) : (urlObj.protocol === 'https:' ? 443 : 80);
       const options = {
         hostname: urlObj.hostname,
-        port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+        port: port,
         path: urlObj.pathname,
         method: 'POST',
         headers: {
@@ -61,6 +62,8 @@ export class WasmClient {
           'Content-Length': Buffer.byteLength(body),
         },
       };
+      
+      logger.debug({ url, hostname: options.hostname, port: options.port, path: options.path }, 'Making WASM request');
 
       const req = http.request(options, (res) => {
         let data = '';
