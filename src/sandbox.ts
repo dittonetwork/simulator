@@ -14,9 +14,11 @@ const logger = getLogger('WasmSandbox');
 
 const app = express();
 
-// Request logging
+// Request logging (skip health checks to reduce noise)
 app.use((req, res, next) => {
-  logger.info({ method: req.method, url: req.url }, 'Request');
+  if (!req.url.includes('/health')) {
+    logger.info({ method: req.method, url: req.url }, 'Request');
+  }
   next();
 });
 
