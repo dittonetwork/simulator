@@ -90,12 +90,12 @@ async function runWasmtimeOnce(params: {
   // Set wasmtime cache to /tmp to avoid read-only filesystem issues
   // Invoke the 'run' function exported by the WASM module
   // Pre-open the work directory for WASI file access
-  // Note: wasmtime v27+ uses --dir HOST::GUEST syntax, or just --dir HOST for same path
+  // Use --mapdir to map host workDir to "." in guest (current directory)
   const wasmtimeArgs = [
     "run",
     "--invoke", "run",
-    "--dir", workDir, // Pre-open workDir, accessible as the same path in WASI
-    "--env", `WASM_RPC_WORK_DIR=${workDir}`, // WASM uses the same host path
+    "--mapdir", `.:${workDir}`, // Map guest "." to host workDir
+    "--env", "WASM_RPC_WORK_DIR=.", // WASM writes to current directory
     "--env", "WASM_RPC_REQUEST_FILE=wasm_rpc_request.json",
     "--env", "WASM_RPC_RESPONSE_FILE=wasm_rpc_response.json",
     params.wasmPath,
