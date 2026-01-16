@@ -168,15 +168,16 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
       try {
         response = await executeViaProxy(request);
         logger.info({ method: request.method, hasError: !!response.error }, 'RPC proxy call completed');
-      } catch (error) {
-        logger.error({ error, method: request.method }, 'RPC proxy call failed');
+      } catch (error: any) {
+        const errMsg = error?.message || error?.code || String(error);
+        logger.error({ error: errMsg, method: request.method }, 'RPC proxy call failed');
         response = {
           jsonrpc: '2.0' as const,
           id: request.id ?? null,
           error: {
             code: -32000,
-            message: 'Server error',
-            data: (error as Error).message,
+            message: 'Proxy error',
+            data: errMsg,
           },
         };
       }
