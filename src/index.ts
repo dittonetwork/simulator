@@ -413,9 +413,11 @@ if (!isSandboxMode) {
   const { getRpcSimulator } = await import('./utils/rpcSimulator.js');
   
   app.post('/rpc/proxy', async (req, res) => {
+    logger.info({ method: req.method, url: req.url, bodyKeys: Object.keys(req.body || {}) }, 'RPC proxy request received');
     try {
       const simulator = getRpcSimulator();
       const response = await simulator.execute(req.body);
+      logger.info({ method: req.body?.method, hasError: !!response.error }, 'RPC proxy response');
       res.json(response);
     } catch (error) {
       logger.error({ error }, 'RPC proxy error');
@@ -428,6 +430,12 @@ if (!isSandboxMode) {
   });
   logger.info('RPC proxy endpoint available at POST /rpc/proxy');
 }
+
+// Catch-all 404 handler (after all routes)
+app.use((req, res) => {
+  logger.warn({ method: req.method, url: req.url }, '404 - Route not found');
+  res.status(404).json({ error: 'Not found', path: req.url });
+});
 
 let isShuttingDown = false;
 async function gracefulShutdown(signal: NodeJS.Signals) {
