@@ -100,21 +100,32 @@ async function executeViaProxy(request: JsonRpcRequest): Promise<JsonRpcResponse
 export async function processWasmRpcRequests(workDir: string): Promise<void> {
   const requestPath = join(workDir, RPC_REQUEST_FILE);
   const responsePath = join(workDir, RPC_RESPONSE_FILE);
+  const processingPath = join(workDir, RPC_REQUEST_FILE + '.processing');
   
   try {
-    // Check if request file exists
+    // Atomically claim the request by renaming it
+    // This prevents duplicate processing from concurrent polling
     try {
-      await fs.access(requestPath);
-    } catch {
-      // No request file, nothing to process
-      return;
+      await fs.rename(requestPath, processingPath);
+    } catch (err: any) {
+      // ENOENT = no request file, nothing to process
+      if (err.code === 'ENOENT') return;
+      throw err;
     }
 
     logger.info({ requestPath, proxyMode: !!RPC_PROXY_URL }, 'Processing RPC request');
 
-    // Read request
-    const requestData = await fs.readFile(requestPath, 'utf-8');
-    logger.info(`RPC request data: ${requestData.substring(0, 200)}`);
+    // Read request from the claimed file
+    const requestData = await fs.readFile(processingPath, 'utf-8');
+    
+    // Clean up processing file immediately
+    try {
+      await fs.unlink(processingPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    
+    logger.debug({ data: requestData.substring(0, 200) }, 'RPC request data');
     
     if (requestData.length > MAX_REQUEST_SIZE) {
       const errorResponse: JsonRpcResponse = {
@@ -199,7 +210,7 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
         logger.info({ method: request.method, hasError: !!response.error }, 'Direct RPC call completed');
       }
     }
-    logger.info(`RPC response: ${JSON.stringify(response).substring(0, 200)}`);
+    logger.debug({ response: JSON.stringify(response).substring(0, 200) }, 'RPC response');
 
     // Validate response size
     const responseStr = JSON.stringify(response);
@@ -219,28 +230,30 @@ export async function processWasmRpcRequests(workDir: string): Promise<void> {
 
     // Write response
     await fs.writeFile(responsePath, responseStr, 'utf-8');
-
-    // Clean up request file
+    logger.info({ responsePath }, 'Response written');
+  } catch (error: any) {
+    logger.error({ error: error.message, code: error.code, path: error.path }, 'RPC processing error');
+    
+    // Clean up processing file if it exists
     try {
-      await fs.unlink(requestPath);
+      await fs.unlink(processingPath);
     } catch {
-      // Ignore cleanup errors
+      // Ignore
     }
-  } catch (error) {
-    logger.error({ error }, 'Failed to process WASM RPC request');
+    
     const errorResponse: JsonRpcResponse = {
       jsonrpc: '2.0' as const,
       id: null,
       error: {
         code: -32000,
         message: 'Server error',
-        data: (error as Error).message,
+        data: error.message,
       },
     };
     try {
       await fs.writeFile(responsePath, JSON.stringify(errorResponse), 'utf-8');
-    } catch {
-      // Ignore write errors
+    } catch (writeErr: any) {
+      logger.error({ error: writeErr.message }, 'Failed to write error response');
     }
   }
 }
