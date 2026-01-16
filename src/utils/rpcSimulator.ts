@@ -53,6 +53,7 @@ export interface JsonRpcRequest {
   id: number | string;
   method: string;
   params?: unknown[];
+  chainId?: number; // Optional: specify which chain to query (non-standard extension)
 }
 
 export interface JsonRpcResponse {
@@ -173,12 +174,15 @@ export class DefaultRpcSimulator implements RpcSimulator {
       // Validate method is allowed
       this.validateMethod(request.method);
 
-      logger.info({ method: request.method, chainId: this.defaultChainId }, 'Calling external RPC');
+      // Use chainId from request if provided, otherwise use default
+      const chainId = request.chainId ?? this.defaultChainId;
       
-      // Execute the method
-      const result = await this.executeMethod(request.method, request.params || []);
+      logger.info({ method: request.method, chainId }, 'Calling external RPC');
+      
+      // Execute the method with the specified chainId
+      const result = await this.executeMethod(request.method, request.params || [], chainId);
 
-      logger.info({ method: request.method, resultPreview: JSON.stringify(result).substring(0, 100) }, 'External RPC call completed');
+      logger.info({ method: request.method, chainId, resultPreview: JSON.stringify(result).substring(0, 100) }, 'External RPC call completed');
       
       return {
         jsonrpc: '2.0',
@@ -229,8 +233,8 @@ export class DefaultRpcSimulator implements RpcSimulator {
   /**
    * Execute a specific RPC method
    */
-  private async executeMethod(method: string, params: unknown[]): Promise<unknown> {
-    const client = this.getClient();
+  private async executeMethod(method: string, params: unknown[], chainId?: number): Promise<unknown> {
+    const client = this.getClient(chainId);
 
     switch (method) {
       case 'eth_blockNumber': {
