@@ -68,7 +68,7 @@ jobs:
             --build-arg BUILD_TAG=${{ github.ref_name }}_${{ needs.prepare.outputs.version }} \
             -f ./Dockerfile \
             --tag $IMAGE_NAME .
-          docker push $IMAGE_NAME
+          docker push $IMAGE_NAME            
       
       - name: Build, tag, and push WASM sandbox image to Amazon ECR
         id: build-wasm-image

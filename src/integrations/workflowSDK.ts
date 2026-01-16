@@ -158,26 +158,39 @@ export class WorkflowSDKIntegration {
         await this.database.connect();
         db = this.database;
         
-        // Get owner address from workflow
-        const ownerAddress = (workflowData.owner as any)?.address || workflowData.owner;
-        const ownerStr = typeof ownerAddress === 'string' ? ownerAddress : String(ownerAddress);
+        // If wasmRefContext is provided (operator mode), we use leader's results
+        // Do NOT create wasmClient - we won't execute WASM, only resolve references from context
+        const isOperatorMode = !!wasmRefContext;
         
-        // Check whitelist if enabled
-        if (config.wasmWhitelistEnabled) {
-          const isWhitelisted = await this.database.isWasmWhitelisted(
-            ownerStr,
-            config.wasmWhitelistAddresses
-          );
-          
-          if (isWhitelisted) {
-            logger.info(`Owner ${ownerStr} is whitelisted for WASM execution`);
-            wasmClient = createWasmClient();
-          } else {
-            logger.warn(`Owner ${ownerStr} is NOT whitelisted - WASM steps will be skipped`);
-          }
+        if (isOperatorMode) {
+          // Operator mode: use provided WASM context from leader, do NOT execute WASM
+          // wasmClient is NOT needed - resolver will use provided context for reference resolution
+          logger.info('Operator mode: Using provided WASM context from leader, will NOT execute WASM');
+          // Do NOT create wasmClient - we're not executing WASM
+          wasmClient = undefined;
         } else {
-          // Whitelist disabled - allow WASM for all
-          wasmClient = createWasmClient();
+          // Leader mode: check whitelist before executing WASM
+          // Get owner address from workflow
+          const ownerAddress = (workflowData.owner as any)?.address || workflowData.owner;
+          const ownerStr = typeof ownerAddress === 'string' ? ownerAddress : String(ownerAddress);
+          
+          // Check whitelist if enabled
+          if (config.wasmWhitelistEnabled) {
+            const isWhitelisted = await this.database.isWasmWhitelisted(
+              ownerStr,
+              config.wasmWhitelistAddresses
+            );
+            
+            if (isWhitelisted) {
+              logger.info(`Owner ${ownerStr} is whitelisted for WASM execution`);
+              wasmClient = createWasmClient();
+            } else {
+              logger.warn(`Owner ${ownerStr} is NOT whitelisted - WASM steps will be skipped`);
+            }
+          } else {
+            // Whitelist disabled - allow WASM for all
+            wasmClient = createWasmClient();
+          }
         }
       }
       

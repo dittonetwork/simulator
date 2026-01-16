@@ -8,6 +8,7 @@ import EventMonitor from './eventMonitor.js';
 import { bigIntToString } from './utils.js';
 import { createWasmClient, WasmClient } from './utils/wasmClient.js';
 import { deserializeDataRefContext, deserializeWasmRefContext } from '@ditto/workflow-sdk';
+import { Database } from './db.js';
 
 const logger = getLogger('ValidateAPI');
 const router: Router = Router();
@@ -15,6 +16,9 @@ const router: Router = Router();
 const isProd = process.env.IS_PROD === 'true';
 const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
 const config = getConfig();
+
+// Initialize database for WASM module lookup (needed for reference resolution in operator mode)
+const db = new Database();
 
 // Initialize WASM client if server URL is configured
 const wasmClient = config.wasmServerUrl ? createWasmClient() : null;
@@ -206,7 +210,12 @@ router.post('/task/validate', async (req: Request, res: Response) => {
 
     // TODO check performer in leader election function
 
-    const sdk = getWorkflowSDKService();
+    // Ensure database is connected for WASM reference resolution (needed even in operator mode)
+    await db.connect();
+    
+    // Pass database to SDK service for WASM reference resolution
+    // In operator mode (wasmRefContext provided), WASM won't be executed, only references resolved
+    const sdk = getWorkflowSDKService(undefined, db);
     // Ensure we have an access token and pass it through
     await reportingClient.initialize();
     const accessToken = reportingClient.getAccessToken();

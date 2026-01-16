@@ -198,13 +198,15 @@ export class Database {
    */
   async storeWasmModule(wasmHash: string, wasmBytes: Buffer): Promise<void> {
     if (!this.db) throw new Error('Database not connected');
-    
+
     await this.db.collection(COLLECTIONS.WASM_MODULES).updateOne(
-      { hash: wasmHash },
+      { wasm_id: wasmHash },
       {
         $set: {
-          hash: wasmHash,
-          bytes: wasmBytes,
+          wasm_id: wasmHash,
+          wasm_code: wasmBytes,
+          wasm_code_size: wasmBytes.length,
+          has_wasm: true,
           storedAt: new Date(),
         },
       },
@@ -217,40 +219,46 @@ export class Database {
    */
   async getWasmModule(wasmHash: string): Promise<Buffer | null> {
     if (!this.db) throw new Error('Database not connected');
-    
+
     const doc = await this.db.collection(COLLECTIONS.WASM_MODULES).findOne(
-      { hash: wasmHash },
-      { projection: { bytes: 1 } }
+      { wasm_id: wasmHash },
+      { projection: { wasm_code: 1 } }
     );
-    
-    if (!doc || !doc.bytes) {
+
+    if (!doc || !doc.wasm_code) {
       return null;
     }
-    
+
     // Handle Buffer type
-    if (Buffer.isBuffer(doc.bytes)) {
-      return doc.bytes;
+    if (Buffer.isBuffer(doc.wasm_code)) {
+      return doc.wasm_code;
     }
-    
-    // Handle MongoDB Binary type
-    if (doc.bytes && typeof doc.bytes.buffer === 'object') {
-      return Buffer.from(doc.bytes.buffer);
+
+    // Handle MongoDB Binary type with $binary format
+    if (doc.wasm_code && doc.wasm_code.$binary) {
+      const base64Data = doc.wasm_code.$binary.base64;
+      return Buffer.from(base64Data, 'base64');
     }
-    
+
+    // Handle MongoDB Binary type (legacy format)
+    if (doc.wasm_code && typeof doc.wasm_code.buffer === 'object') {
+      return Buffer.from(doc.wasm_code.buffer);
+    }
+
     // Handle base64 string (common storage format)
-    if (typeof doc.bytes === 'string') {
+    if (typeof doc.wasm_code === 'string') {
       try {
-        return Buffer.from(doc.bytes, 'base64');
+        return Buffer.from(doc.wasm_code, 'base64');
       } catch (error) {
         // If base64 decode fails, try treating as hex
         try {
-          return Buffer.from(doc.bytes, 'hex');
+          return Buffer.from(doc.wasm_code, 'hex');
         } catch {
           return null;
         }
       }
     }
-    
+
     return null;
   }
 
@@ -260,7 +268,7 @@ export class Database {
   async hasWasmModule(wasmHash: string): Promise<boolean> {
     if (!this.db) throw new Error('Database not connected');
     const count = await this.db.collection(COLLECTIONS.WASM_MODULES).countDocuments(
-      { hash: wasmHash },
+      { wasm_id: wasmHash },
       { limit: 1 }
     );
     return count > 0;
