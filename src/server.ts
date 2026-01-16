@@ -189,14 +189,19 @@ async function runWasmtimeOnce(params: {
 
     child.on("exit", () => {
       clearTimeout(t);
-      if (rpcProcessor) {
-        clearInterval(rpcProcessor);
-      }
+      // Don't stop RPC processor yet - let pending requests finish
       resolve(false);
     });
   });
 
-  // Clean up work directory
+  // Grace period: let pending RPC calls complete before cleanup
+  // This handles the case where WASM exits but RPC response is still in flight
+  if (rpcFilesFound > 0) {
+    logger.info({ rpcFilesFound, workDir }, 'Waiting for pending RPC responses');
+    await new Promise(resolve => setTimeout(resolve, 500)); // 500ms grace period
+  }
+  
+  // Stop RPC processor and clean up
   if (rpcProcessor) {
     clearInterval(rpcProcessor);
   }
