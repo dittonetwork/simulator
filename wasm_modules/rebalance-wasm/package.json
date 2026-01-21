@@ -1,0 +1,19 @@
+{
+  "name": "rebalance-wasm",
+  "version": "0.1.0",
+  "description": "Yield optimizer WASM module and workflow integration",
+  "type": "module",
+  "scripts": {
+    "build": "./build.sh",
+    "create-workflow": "bun run create-workflow.ts"
+  },
+  "dependencies": {
+    "@ditto/workflow-sdk": "workspace:*",
+    "dotenv": "^16.0.3",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
