@@ -60,3 +60,4 @@ examples/**/Cargo.lock
 wasm-cache/
 /tmp/
 *.wasm.tmp
+*.wasm

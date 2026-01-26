@@ -1,43 +1,75 @@
-# Yield Optimizer WASM Module
+# Vault Automation WASM Module
 
-High-performance WASM module for optimizing YieldSplitVault allocations across multiple lending protocols.
+WASM module for YieldSplitVault automation: yield optimization and emergency monitoring.
 
 ## Overview
 
-This WASM module implements the grid search optimization algorithm from `tmp/optimizer/` in Rust. It evaluates millions of allocation scenarios to find the optimal distribution of funds across protocols like Aave, Spark, Fluid, and MetaMorpho.
+This module provides two core functions for vault automation:
+
+1. **Rebalance Optimizer** - Grid search optimization across lending protocols
+2. **Emergency Monitor** - Guard status monitoring with conditional execution
+
+Both share a single WASM binary with action-based dispatching.
 
 ## Features
 
-- **Grid Search Optimization**: Evaluates all weight combinations with configurable step size
-- **Protocol Support**: Aave V3, Spark, Fluid V2, MetaMorpho
-- **IRM Simulation**: Accurate interest rate model calculations
-- **Constraint Handling**: TVL caps, blocked adapters, minimum allocations
-- **Fast Execution**: Pure Rust implementation optimized for WASM
+### Rebalance Optimizer
+- Grid search across all weight combinations
+- Protocol support: Aave V3, Spark, Fluid V2, MetaMorpho
+- IRM simulation for accurate APY calculations
+- Constraint handling: TVL caps, blocked adapters, min allocations
+- RPC integration via VaultDataReader
 
-## Performance
-
-- **~4.6M scenarios** evaluated with 1% step across 5 protocols
-- **Typical execution**: 200-500ms (depending on constraints)
-- **Output**: Optimal allocations as uint256[] for smart contract calls
+### Emergency Monitor
+- Checks GuardManager aggregated status
+- Validates guard data freshness (<5 min)
+- Returns `skipRemainingSteps: true` when no action needed
+- Enables conditional workflow execution
 
 ## Build
 
 ```bash
-# Install Rust toolchain if needed
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Build WASM module
 ./build.sh
 ```
 
-This generates `yield-optimizer.wasm`.
+Generates `yield-optimizer.wasm` (~305KB).
+
+## Architecture
+
+```
+src/
+├── lib.rs              # Entry point - dispatches by "action" field
+├── common.rs           # Shared: RPC, logging, output helpers
+├── rebalance/
+│   └── mod.rs          # Yield optimization logic
+└── emergency/
+    └── mod.rs          # Guard monitoring logic
+```
 
 ## Input Format
 
-The WASM module expects JSON input via stdin:
+### Rebalance (action: "rebalance")
 
 ```json
 {
+  "action": "rebalance",
+  "vaultDataReader": "0x...",
+  "vault": "0x...",
+  "protocolTypes": [1, 3, 4, 4, 2],
+  "pools": ["0x...", "0x...", "0x...", "0x...", "0x..."],
+  "chainId": 1,
+  "config": {
+    "stepPct": 1,
+    "maxPoolShare": 0.2,
+    "minAllocation": 1000
+  }
+}
+```
+
+Legacy mode (without RPC):
+```json
+{
+  "action": "rebalance",
   "totalAssets": 10000000,
   "protocols": [
     {
@@ -51,29 +83,24 @@ The WASM module expects JSON input via stdin:
     }
   ],
   "blockedMask": 0,
-  "config": {
-    "stepPct": 1,
-    "maxPoolShare": 0.2,
-    "minAllocation": 1000
-  }
+  "config": { "stepPct": 1, "maxPoolShare": 0.2, "minAllocation": 1000 }
 }
 ```
 
-### Protocol Types
+### Emergency Check (action: "emergency-check")
 
-- `1` = Aave V3
-- `2` = Spark
-- `3` = Fluid V2
-- `4` = MetaMorpho
-
-### Blocked Mask
-
-Bitmask indicating blocked protocols (from GuardManager):
-- Bit 0 = Protocol 0
-- Bit 1 = Protocol 1
-- etc.
+```json
+{
+  "action": "emergency-check",
+  "guardManager": "0x...",
+  "vault": "0x...",
+  "chainId": 1
+}
+```
 
 ## Output Format
+
+### Rebalance Output
 
 ```json
 {
@@ -81,12 +108,11 @@ Bitmask indicating blocked protocols (from GuardManager):
   "result": {
     "ok": true,
     "success": true,
-    "allocations": [
-      "0x00000000000000000000000000000000000000000000000000000000001e8480",
-      "0x00000000000000000000000000000000000000000000000000000000001e8480"
-    ],
-    "allocationsDecimal": [2000000, 2000000],
-    "weights": [0.2, 0.2, 0.2, 0.2, 0.2],
+    "value": ["0x0de0b6b3a7640000", "0x1bc16d674ec80000", ...],
+    "weights": ["0x0de0b6b3a7640000", ...],
+    "weightsDecimal": [0.1, 0.2, 0.3, 0.2, 0.2],
+    "allocations": ["0x...", ...],
+    "allocationsDecimal": [1000000, 2000000, ...],
     "expectedReturn12h": 1234.56,
     "expectedApyWeighted": 0.045,
     "apys": [0.04, 0.035, 0.08, 0.06, 0.055],
@@ -96,104 +122,132 @@ Bitmask indicating blocked protocols (from GuardManager):
 }
 ```
 
-## Workflow Integration
+### Emergency Check Output (no action needed)
 
-The TypeScript workflow script (`create-workflow.ts`) demonstrates how to:
-
-1. Execute the WASM optimizer with protocol data
-2. Pass the optimization results to a rebalance contract
-3. Handle the workflow submission to the Ditto network
-
-```bash
-# Install dependencies
-npm install  # or bun install
-
-# Create workflow
-npm run create-workflow  # or bun run create-workflow.ts
+```json
+{
+  "ok": true,
+  "result": {
+    "ok": true,
+    "success": true,
+    "skipRemainingSteps": true,
+    "message": "All guards normal, no action needed"
+  }
+}
 ```
 
-## Testing Locally
+### Emergency Check Output (action needed)
 
-You can test the WASM module locally using wasmtime:
+```json
+{
+  "ok": true,
+  "result": {
+    "ok": true,
+    "success": true,
+    "shouldActivate": true,
+    "aggregatedStatus": 1,
+    "isEmergencyMode": false,
+    "dataFresh": true,
+    "message": "Guard(s) triggered with fresh data, activating emergency mode"
+  }
+}
+```
+
+## Workflow Integration
+
+### Rebalance Workflow
+
+```typescript
+// Step 1: WASM optimizes allocations
+.addStep({
+  type: 'wasm',
+  wasmId: 'vault-automation-v1',
+  wasmInput: {
+    action: 'rebalance',
+    vaultDataReader: VAULT_DATA_READER,
+    vault: VAULT_ADDRESS,
+    protocolTypes: [1, 3, 4, 4, 2],
+    pools: [...],
+    chainId: 1,
+  },
+})
+// Step 2: Execute rebalance with optimized weights
+.addStep({
+  target: VAULT_ADDRESS,
+  abi: 'executeRebalance(uint256[])',
+  args: ['$wasm:vault-automation-v1'],
+})
+```
+
+### Emergency Workflow (with skip support)
+
+```typescript
+// Step 1: WASM checks guards - returns skipRemainingSteps if no action needed
+.addStep({
+  type: 'wasm',
+  wasmId: 'vault-automation-v1',
+  wasmInput: {
+    action: 'emergency-check',
+    guardManager: GUARD_MANAGER,
+    vault: VAULT_ADDRESS,
+    chainId: 1,
+  },
+})
+// Step 2: Only executed if WASM didn't skip
+.addStep({
+  target: GUARD_MANAGER,
+  abi: 'activateEmergencyMode()',
+  args: [],
+})
+```
+
+## Protocol Types
+
+| Type | Protocol |
+|------|----------|
+| 1 | Aave V3 |
+| 2 | Spark |
+| 3 | Fluid V2 |
+| 4 | MetaMorpho |
+
+## Testing Locally
 
 ```bash
 # Install wasmtime
 curl https://wasmtime.dev/install.sh -sSf | bash
 
-# Run with test input
-echo '{"totalAssets":10000000,"protocols":[...],"blockedMask":0}' | \
+# Test rebalance
+echo '{"action":"rebalance","totalAssets":10000000,"protocols":[...],"blockedMask":0}' | \
+  wasmtime yield-optimizer.wasm
+
+# Test emergency check (requires RPC environment)
+WASM_RPC_WORK_DIR=/tmp \
+echo '{"action":"emergency-check","guardManager":"0x...","vault":"0x...","chainId":1}' | \
   wasmtime yield-optimizer.wasm
 ```
 
 ## Algorithm
 
-1. **Grid Generation**: Generate all weight combinations summing to 100%
-   - Uses stars-and-bars combinatorics
-   - Optionally bounded by TVL constraints for faster execution
+### Rebalance
+1. **Grid Generation**: All weight combinations summing to 100%
+2. **Constraint Filtering**: TVL caps, blocked adapters, min allocations
+3. **IRM Simulation**: Protocol-specific APY calculations
+4. **Optimization**: Select maximum expected 12h return
 
-2. **Constraint Filtering**: Remove invalid allocations
-   - Blocked adapter deposits (from GuardManager)
-   - TVL cap violations (>20% of pool)
-   - Below minimum allocation threshold
+### Emergency Monitor
+1. Check `GuardManager.isEmergencyMode()` - skip if already active
+2. Check `GuardManager.getAggregatedStatus()` - skip if NORMAL
+3. Fetch registered guards and check data freshness
+4. If triggered + fresh (<5 min): proceed to activate
+5. Otherwise: return `skipRemainingSteps: true`
 
-3. **IRM Simulation**: Calculate APYs for each protocol
-   - **Aave/Spark**: Single-kink IRM
-   - **Fluid**: Double-kink IRM
-   - **MetaMorpho**: Dilution model
+## Workflows
 
-4. **Return Calculation**: Expected 12h return = Σ(allocation × APY × 12/8760)
-
-5. **Optimization**: Select allocation with maximum expected return
-
-## Architecture
-
-```
-tmp/rebalance-wasm/
-├── src/
-│   └── lib.rs           # Main WASM implementation
-├── Cargo.toml           # Rust dependencies
-├── build.sh             # Build script
-├── create-workflow.ts   # Workflow creation
-├── package.json         # TypeScript dependencies
-├── test-input.json      # Sample input for testing
-└── README.md           # This file
-```
-
-## Production Considerations
-
-### Data Source
-
-In production, protocol data should be fetched via:
-- **VaultDataReader** helper contract (see `tmp/yield-split/helpers/VaultDataReader.sol`)
-- Single RPC call to `getSnapshot()` returns all protocol state
-- Can be called from TypeScript or from within WASM via RPC proxy
-
-### WASM Indexing
-
-Before workflow execution, the WASM module must be indexed in MongoDB:
-
-```bash
-# Generate MongoDB document
-bun run index-wasm.ts
-```
-
-### Gas Optimization
-
-The rebalance contract call may be expensive if many protocols need rebalancing. Consider:
-- Setting higher `minAllocation` to avoid dust positions
-- Using larger `stepPct` (e.g., 5%) to reduce computation time
-- Implementing on-chain delta encoding to only update changed allocations
-
-## Comparison with Python
-
-This Rust/WASM implementation provides:
-- ✅ **Portable**: Runs in WASM runtime (browser, Node, Ditto network)
-- ✅ **Deterministic**: Same input always produces same output
-- ✅ **Self-contained**: No external dependencies or Python runtime needed
-- ⚠️ **Performance**: Slightly slower than Python+Numba (no SIMD/parallelization in WASM)
-- ⚠️ **Development**: Rust has steeper learning curve than Python
-
-For off-chain optimization where Python is available, use `tmp/optimizer/`. For on-chain automation via Ditto workflows, use this WASM module.
+| File | Purpose | Frequency |
+|------|---------|-----------|
+| `rebalance-workflow.ts` | Yield optimization | Every 12h |
+| `emergency-workflow.ts` | Guard monitoring | Every 5min |
+| `guard-updates-workflow.ts` | Update guard caches | Every 30min |
 
 ## License
 
