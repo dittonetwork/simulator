@@ -1,16 +1,17 @@
 /**
  * Guard Updates Workflow
  *
- * Updates cached guard data (Chainlink price feeds) to prevent staleness.
+ * Updates all guard data and auto-activates emergency mode if triggers detected.
  *
- * Frequency: Every 30-60 minutes
+ * Frequency: Every 30 minutes
  * Role: OPERATOR_ROLE
  * Criticality: HIGH - if guards go stale, vault enters protective mode
  *
- * Trigger logic:
- *   if (block.timestamp - lastUpdateTimestamp > maxStaleness * 0.8) {
- *     updateSingleGuard(guard)
- *   }
+ * New behavior (v2):
+ * - Uses updateAllGuards() instead of individual updateSingleGuard() calls
+ * - updateAllGuards() auto-activates emergency mode if any guard triggers
+ * - Returns (uint8 blockedMask, bool withdrawAll) for immediate action
+ * - Eliminates need for separate emergency monitoring workflow
  */
 
 import dotenv from 'dotenv';
@@ -21,8 +22,6 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 import {
   GUARD_MANAGER_ADDRESS,
-  CHAINLINK_PRICE_GUARD_ADDRESS,
-  PROTOCOL_BLOCKLIST_GUARD_ADDRESS,
   GUARD_UPDATE_INTERVAL,
   MAINNET_CHAIN_ID,
 } from './config';
@@ -48,11 +47,10 @@ async function main() {
   console.log(`Owner: ${ownerAccount.address}`);
   console.log(`Chain: Mainnet (${MAINNET_CHAIN_ID})`);
   console.log(`GuardManager: ${GUARD_MANAGER_ADDRESS}`);
-  console.log(`Guards:`);
-  console.log(`  ChainlinkPriceGuard: ${CHAINLINK_PRICE_GUARD_ADDRESS}`);
-  console.log(`  ProtocolBlocklistGuard: ${PROTOCOL_BLOCKLIST_GUARD_ADDRESS}`);
   console.log(`Schedule: ${GUARD_UPDATE_INTERVAL}\n`);
 
+  // Single step workflow using updateAllGuards()
+  // This updates all registered guards and auto-activates emergency mode if needed
   const workflow = WorkflowBuilder.create(ownerAccount)
     .addCronTrigger(GUARD_UPDATE_INTERVAL)
     .setValidAfter(Date.now())
@@ -60,17 +58,11 @@ async function main() {
     .addJob(
       JobBuilder.create('guard-update-job')
         .setChainId(MAINNET_CHAIN_ID)
-        // Update ChainlinkPriceGuard
+        // Update all guards in one call - auto-activates emergency if triggers detected
         .addStep({
           target: GUARD_MANAGER_ADDRESS,
-          abi: 'updateSingleGuard(address)',
-          args: [CHAINLINK_PRICE_GUARD_ADDRESS],
-        })
-        // Update ProtocolBlocklistGuard
-        .addStep({
-          target: GUARD_MANAGER_ADDRESS,
-          abi: 'updateSingleGuard(address)',
-          args: [PROTOCOL_BLOCKLIST_GUARD_ADDRESS],
+          abi: 'updateAllGuards()',
+          args: [],
         })
         .build()
     )
@@ -79,8 +71,7 @@ async function main() {
   console.log('Workflow created:');
   console.log(`  Jobs: ${workflow.jobs.length}`);
   console.log(`  Steps: ${workflow.jobs[0].steps.length}`);
-  console.log(`    1. updateSingleGuard(ChainlinkPriceGuard)`);
-  console.log(`    2. updateSingleGuard(ProtocolBlocklistGuard)`);
+  console.log(`    1. updateAllGuards() - updates all guards, auto-activates emergency if needed`);
   console.log(`  Trigger: ${GUARD_UPDATE_INTERVAL}\n`);
 
   console.log('Submitting workflow...');

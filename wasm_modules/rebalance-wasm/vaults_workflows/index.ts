@@ -6,7 +6,8 @@
  * Available Workflows:
  *
  * 1. guard-updates-workflow.ts
- *    - Updates guard cached data (Chainlink prices)
+ *    - Updates all guards and auto-activates emergency mode if needed
+ *    - Uses updateAllGuards() which returns (blockedMask, withdrawAll)
  *    - Frequency: Every 30 minutes
  *    - Role: OPERATOR_ROLE
  *    - Criticality: HIGH
@@ -23,17 +24,12 @@
  *    - Role: Public
  *    - Criticality: MEDIUM
  *
- * 4. emergency-workflow.ts
- *    - Monitors and activates emergency mode when needed
- *    - Frequency: Every 5 minutes
- *    - Role: OPERATOR_ROLE
- *    - Criticality: CRITICAL
+ * Note: Emergency workflow removed - updateAllGuards() auto-activates emergency mode
  *
  * Usage:
  *   bun run guard-updates-workflow.ts
  *   bun run rebalance-workflow.ts
  *   bun run timepoints-workflow.ts
- *   bun run emergency-workflow.ts
  *
  * Before running:
  *   1. Update config.ts with deployed contract addresses

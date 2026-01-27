@@ -1,20 +1,16 @@
 //! WASM Module: Vault Automation
 //!
-//! This module provides two main functionalities:
-//! 1. Rebalance Optimizer - finds optimal allocations across lending protocols
-//! 2. Emergency Monitor - checks guard status and activates emergency mode
+//! This module provides yield optimization for vault rebalancing.
 //!
 //! The action is determined by the "action" field in the input JSON:
-//! - "rebalance" (default): Run yield optimizer
-//! - "emergency-check": Check guard status and activate emergency mode if needed
+//! - "rebalance" (default): Run yield optimizer via VaultDataReader RPC
 //!
-//! Both modules support the skipRemainingSteps flag to conditionally skip
-//! subsequent workflow steps.
+//! Note: Emergency monitoring is no longer needed as the contract's
+//! updateAllGuards() auto-activates emergency mode when triggers are detected.
 
 #[macro_use]
 pub mod common;
 pub mod rebalance;
-pub mod emergency;
 
 use serde_json::Value;
 use std::io::{self, BufRead};
@@ -61,12 +57,9 @@ pub extern "C" fn run() {
                 rebalance::run_legacy(input);
             }
         }
-        "emergency-check" | "emergency" => {
-            emergency::run(input);
-        }
         _ => {
             log_error!("Unknown action: {}", action);
-            common::output_error(&format!("Unknown action: {}. Valid actions: rebalance, emergency-check", action));
+            common::output_error(&format!("Unknown action: {}. Valid actions: rebalance", action));
         }
     }
 

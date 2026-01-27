@@ -14,11 +14,11 @@ export const MAINNET_CHAIN_ID = mainnet.id;
 // ============ Mainnet Contract Addresses ============
 
 // Core Vault Contracts
-export const VAULT_ADDRESS = '0xa1d1f4233dc8c792f5baea954e2f236bee6dd965'; // YieldSplitVault proxy
-export const GUARD_MANAGER_ADDRESS = '0x8b07d38ed03e909a673d0cd59a27615d9eee8520'; // GuardManager proxy
-export const RETURN_ESTIMATOR_ADDRESS = '0xc7a88e1b39f38ef838a6e8cf7e211d0aae90cc81'; // ReturnEstimator proxy
-export const REBALANCER_ADDRESS = '0xf3ef2a5d993cd958d1e6072d2612504124e28848'; // Rebalancer
-export const VAULT_DATA_READER_ADDRESS = '0xf9f69D1bA1007A34bDAdAc55879AC406A3e38250'; // Deployed
+export const VAULT_ADDRESS = '0x62507A876309639096D08E7F77AC9CfB67Df8011'; // YieldSplitVault proxy
+export const GUARD_MANAGER_ADDRESS = '0xD8b3208abEF2Be174c54013626f5AAd028dA099D'; // GuardManager proxy
+export const RETURN_ESTIMATOR_ADDRESS = '0x7C347eA9b12aD44A7d66341F51349fDa3380B754'; // ReturnEstimator proxy
+export const REBALANCER_ADDRESS = '0x5712F60a08e771a73Ac33977611c75Eb5A968aA0'; // Rebalancer
+export const VAULT_DATA_READER_ADDRESS = '0xb228c97Ef7c67f2ad49Fe8645e3d7E7b5C5897aa'; // VaultDataReader proxy
 
 // Protocol Pool Addresses
 export const AAVE_POOL_ADDRESS = '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2';
@@ -28,22 +28,22 @@ export const MORPHO_GAUNTLET_ADDRESS = '0xdd0f28e19C1780eb6396170735D45153D26149
 export const MORPHO_STEAKHOUSE_ADDRESS = '0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB';
 
 // Adapter Addresses (set after deployment)
-export const AAVE_ADAPTER_ADDRESS = '0x5f73a0d132c7ab00350e6a05c9eb1b369d4e57a8';
-export const SPARK_ADAPTER_ADDRESS = '0x545fad2c30017f0e3e42afcf9283273c9df8fc05';
-export const FLUID_ADAPTER_ADDRESS = '0x6a00de32d7a81af3021d439ea3725eeece3c7184';
-export const MORPHO_GAUNTLET_ADAPTER_ADDRESS = '0x20a455051f5d373fd2017c525a792ac0f7b42bbf';
-export const MORPHO_STEAKHOUSE_ADAPTER_ADDRESS = '0xe59bbd86260b19cb8b367011d0a384bc81aadd24';
+export const AAVE_ADAPTER_ADDRESS = '0x6BdbdD613993E1C6FDb47773B40A39a5807cf72D';
+export const SPARK_ADAPTER_ADDRESS = '0x15310eCF1197792a4767B168aEF7793dBcfC05bA';
+export const FLUID_ADAPTER_ADDRESS = '0x75e9626a062A7e9049c5a9A199137D255733f341';
+export const MORPHO_GAUNTLET_ADAPTER_ADDRESS = '0xcb541A3a8B92B941407F4F8C8E83CD88CD760d59';
+export const MORPHO_STEAKHOUSE_ADAPTER_ADDRESS = '0x66b343a03aBd88A35111Bed5815341E831E2A2Bb';
 
 // Estimator Addresses (set after deployment)
-export const AAVE_ESTIMATOR_ADDRESS = '0x54cd256e129959a8ee5ec5a8d6f80f67f0d47adc';
-export const SPARK_ESTIMATOR_ADDRESS = '0x059888375be78ef15d6aeeda32e06ad56c088153';
-export const FLUID_ESTIMATOR_ADDRESS = '0xdc2f0380e0d82f234abe3e4d418a2df15a0d9ff9';
-export const MORPHO_GAUNTLET_ESTIMATOR_ADDRESS = '0x6d3ab6d88e0c0741620c4460453c12a7ac33b4bc';
-export const MORPHO_STEAKHOUSE_ESTIMATOR_ADDRESS = '0xf1ba2f9ac5144c85cec79bb8d6bcc58743b62515';
+export const AAVE_ESTIMATOR_ADDRESS = '0x19608f06cf3fEB425b18FFFc638b190C876cBFf9';
+export const SPARK_ESTIMATOR_ADDRESS = '0x2D61c45C17672dc5f3F472657733e285c6DD56e5';
+export const FLUID_ESTIMATOR_ADDRESS = '0x3d5Be9Fe16B9e5113056Ed873ADEFb2a05dD12C1';
+export const MORPHO_GAUNTLET_ESTIMATOR_ADDRESS = '0x24b9cb9bCdf9e7d3d89F45118841d41FfB968f1B';
+export const MORPHO_STEAKHOUSE_ESTIMATOR_ADDRESS = '0x274e5Bd1C74fF002023E5Fc3710de4B0b92ADE67';
 
 // Guard Addresses
-export const CHAINLINK_PRICE_GUARD_ADDRESS = '0xb1d712eb1c52a57696c41686a6ff41e93f6a34ec';
-export const PROTOCOL_BLOCKLIST_GUARD_ADDRESS = '0xF537D9E3C3dfeeAB4aC78eeFc8e68e078229E8Bc';
+export const CHAINLINK_PRICE_GUARD_ADDRESS = '0x79CdbAd430Db26BA5b71F4dA6681A53a1a22C94E';
+export const PROTOCOL_BLOCKLIST_GUARD_ADDRESS = '0x443D490928912251B26f68d8B1b865e7660E3421';
 
 export const ALL_GUARD_ADDRESSES = [
   CHAINLINK_PRICE_GUARD_ADDRESS,
@@ -86,7 +86,6 @@ export const POOL_ADDRESSES = [
 export const GUARD_UPDATE_INTERVAL = '*/30 * * * *'; // Every 30 minutes
 export const REBALANCE_INTERVAL = '0 */12 * * *'; // Every 12 hours
 export const TIMEPOINT_INTERVAL = '0 */2 * * *'; // Every 2 hours
-export const EMERGENCY_CHECK_INTERVAL = '*/5 * * * *'; // Every 5 minutes
 
 // ============ ABIs ============
 
@@ -103,8 +102,8 @@ export const VAULT_ABI = [
 
 export const GUARD_MANAGER_ABI = [
   'function updateSingleGuard(address guard) external',
+  'function updateAllGuards() external returns (uint8 blockedMask, bool withdrawAll)',
   'function isEmergencyMode() external view returns (bool)',
-  'function activateEmergencyMode() external returns (uint8 mask, bool withdrawAll)',
   'function deactivateEmergencyMode() external',
   'function getCachedState() external view returns (uint8 blockedMask, bool emergencyAll)',
   'function getAggregatedStatus() external view returns (uint8)',
@@ -136,4 +135,3 @@ export const WAD = BigInt('1000000000000000000'); // 1e18
 export const BPS = 10000;
 export const REBALANCE_COOLDOWN = 12 * 60 * 60; // 12 hours in seconds
 export const MAX_STALENESS_DEFAULT = 60 * 60; // 1 hour in seconds
-export const EMERGENCY_ACTIVATION_MAX_AGE = 5 * 60; // 5 minutes in seconds
