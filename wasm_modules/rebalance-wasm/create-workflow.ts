@@ -24,9 +24,6 @@ import { submitWorkflow } from '@ditto/workflow-sdk';
 import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base } from 'viem/chains';
 import { keccak256, stringToBytes } from 'viem';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
 
 dotenv.config({ path: '../../.env' });
 
@@ -42,14 +39,6 @@ if (!WORKFLOW_CONTRACT_ADDRESS || !OWNER_PRIVATE_KEY || !EXECUTOR_ADDRESS || !IP
   console.error('  EXECUTOR_ADDRESS');
   console.error('  IPFS_SERVICE_URL');
   process.exit(1);
-}
-
-/**
- * Calculate SHA256 hash of WASM file
- */
-function calculateWasmHash(wasmPath: string): string {
-  const wasmBytes = fs.readFileSync(wasmPath);
-  return crypto.createHash('sha256').update(wasmBytes).digest('hex');
 }
 
 /**
@@ -81,18 +70,12 @@ async function main() {
   const storage = new IpfsStorage(IPFS_SERVICE_URL);
   const ownerAccount = privateKeyToAccount(OWNER_PRIVATE_KEY);
 
-  // Check if WASM file exists
-  const wasmPath = path.join(__dirname, 'yield-optimizer.wasm');
-  if (!fs.existsSync(wasmPath)) {
-    console.error(`WASM file not found: ${wasmPath}`);
-    console.error('Please run: ./build.sh first');
-    process.exit(1);
-  }
-
-  // Calculate WASM hash
-  const wasmHash = calculateWasmHash(wasmPath);
-  console.log(`WASM hash (SHA256): ${wasmHash}`);
-  console.log(`⚠️  Make sure this WASM module is already indexed in MongoDB!\n`);
+  // WASM ID and hash (keccak256 of name)
+  const wasmId = 'rebalance-wasm-v1';
+  const wasmHash = keccak256(stringToBytes(wasmId)).slice(2);
+  console.log(`WASM ID: ${wasmId}`);
+  console.log(`WASM Hash (keccak256 of ID): ${wasmHash}`);
+  console.log(`Make sure this WASM module is already indexed in MongoDB!\n`);
 
   console.log(`Owner (Smart Account): ${ownerAccount.address}`);
   console.log(`\nData Source: Ethereum Mainnet (${mainnet.id})`);
@@ -107,8 +90,6 @@ async function main() {
   console.log(`  5. Morpho Steakhouse: ${MORPHO_STEAKHOUSE_ADDRESS}\n`);
 
   // Create workflow
-  const wasmId = 'rebalance-wasm-v1';
-
   const workflow = WorkflowBuilder.create(ownerAccount)
     // .addCronTrigger('0 */12 * * *') // Every 12 hours (rebalance cooldown)
     .addCronTrigger('*/2 * * * *') // Every 12 hours (rebalance cooldown)
@@ -125,7 +106,7 @@ async function main() {
           target: '0x0000000000000000000000000000000000000000',
           abi: '',
           args: [],
-          wasmHash: keccak256(stringToBytes(wasmId)).toString().slice(2),
+          wasmHash: wasmHash,
           wasmId: wasmId,
           wasmInput: {
             vaultDataReader: VAULT_DATA_READER_ADDRESS,
@@ -183,19 +164,19 @@ async function main() {
       IPFS_SERVICE_URL,
     );
 
-    console.log('\n✅ Workflow submitted successfully!');
+    console.log('\nWorkflow submitted successfully!');
     console.log(`  IPFS Hash: ${response.ipfsHash}`);
     console.log(`  UserOp Hashes: ${response.userOpHashes.length}`);
     response.userOpHashes.forEach((hash, i) => {
       console.log(`    Job ${i + 1}: ${hash.userOpHash || hash.receipt?.transactionHash || 'N/A'}`);
     });
 
-    console.log('\n⚠️  IMPORTANT: Make sure the WASM module is indexed in MongoDB!');
-    console.log(`   WASM Hash: ${wasmHash}`);
-    console.log(`   WASM ID: ${wasmId}`);
+    console.log('\nIMPORTANT: Make sure the WASM module is indexed in MongoDB!');
+    console.log(`  WASM ID: ${wasmId}`);
+    console.log(`  WASM Hash (keccak256 of ID): ${wasmHash}`);
 
   } catch (error) {
-    console.error('\n❌ Failed to submit workflow:', error);
+    console.error('\nFailed to submit workflow:', error);
     process.exit(1);
   }
 }

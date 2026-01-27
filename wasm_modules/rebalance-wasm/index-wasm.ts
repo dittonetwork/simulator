@@ -1,9 +1,9 @@
 /**
  * Script to generate MongoDB document for WASM module
- * 
- * This script reads the compiled WASM file, calculates its hash,
- * and prints the MongoDB document that should be inserted.
- * 
+ *
+ * This script reads the compiled WASM file, calculates the wasm_id
+ * (keccak256 of the wasmId name), and prints the MongoDB document.
+ *
  * Usage:
  *   bun run index-wasm.ts > wasm-document.json
  *   # Then insert manually or use mongoimport
@@ -11,23 +11,25 @@
 
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
+import { keccak256, stringToBytes } from 'viem';
+
+const WASM_ID_NAME = 'vault-automation-v1';
 
 function generateWasmDocument() {
   // Check if WASM file exists
   const wasmPath = path.join(__dirname, 'yield-optimizer.wasm');
   if (!fs.existsSync(wasmPath)) {
-    console.error(`❌ WASM file not found: ${wasmPath}`);
+    console.error(`WASM file not found: ${wasmPath}`);
     console.error('Please run: ./build.sh first');
     process.exit(1);
   }
-  
+
   // Read WASM file
   const wasmBytes = fs.readFileSync(wasmPath);
-  
-  // Calculate SHA256 hash
-  const wasmHash = crypto.createHash('sha256').update(wasmBytes).digest('hex');
-  
+
+  // Calculate wasm_id as keccak256 of the name (without 0x prefix)
+  const wasmHash = keccak256(stringToBytes(WASM_ID_NAME)).slice(2);
+
   // Create MongoDB document structure matching the new schema
   // Note: In actual MongoDB, 'wasm_code' will be stored as Binary type
   // For JSON output, we'll show it as base64 in $binary format
@@ -49,7 +51,8 @@ function generateWasmDocument() {
 
   // Also print helpful info to stderr (so it doesn't interfere with JSON output)
   console.error('\n=== WASM Module Document ===');
-  console.error(`WASM ID (SHA256): ${wasmHash}`);
+  console.error(`WASM ID Name: ${WASM_ID_NAME}`);
+  console.error(`WASM ID (keccak256 of name): ${wasmHash}`);
   console.error(`Size: ${wasmBytes.length} bytes (${(wasmBytes.length / 1024).toFixed(2)} KB)`);
   console.error('\nMongoDB Insert Command (MongoDB Shell):');
   console.error(`db.wasm_modules.insertOne({`);

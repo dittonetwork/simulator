@@ -25,9 +25,6 @@ import { IpfsStorage } from '@ditto/workflow-sdk';
 import { submitWorkflow } from '@ditto/workflow-sdk';
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, stringToBytes } from 'viem';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
 
 import {
   VAULT_ADDRESS,
@@ -50,34 +47,21 @@ if (!WORKFLOW_CONTRACT_ADDRESS || !OWNER_PRIVATE_KEY || !EXECUTOR_ADDRESS || !IP
   process.exit(1);
 }
 
-function calculateWasmHash(wasmPath: string): string {
-  const wasmBytes = fs.readFileSync(wasmPath);
-  return crypto.createHash('sha256').update(wasmBytes).digest('hex');
-}
-
 async function main() {
   console.log('=== Creating Rebalance Workflow ===\n');
 
   const storage = new IpfsStorage(IPFS_SERVICE_URL);
   const ownerAccount = privateKeyToAccount(OWNER_PRIVATE_KEY);
 
-  // Check WASM file
-  const wasmPath = path.join(__dirname, '..', 'yield-optimizer.wasm');
-  if (!fs.existsSync(wasmPath)) {
-    console.error(`WASM file not found: ${wasmPath}`);
-    console.error('Please run: ./build.sh first');
-    process.exit(1);
-  }
-
-  const wasmHash = calculateWasmHash(wasmPath);
-  const wasmId = 'vault-automation-v1'; // Combined WASM module for rebalance and emergency
+  const wasmId = 'vault-automation-v1';
+  const wasmHash = keccak256(stringToBytes(wasmId)).slice(2); // keccak256 of wasmId
 
   console.log(`Owner: ${ownerAccount.address}`);
   console.log(`Chain: Mainnet (${MAINNET_CHAIN_ID})`);
   console.log(`Vault: ${VAULT_ADDRESS}`);
   console.log(`VaultDataReader: ${VAULT_DATA_READER_ADDRESS}`);
-  console.log(`WASM Hash: ${wasmHash}`);
   console.log(`WASM ID: ${wasmId}`);
+  console.log(`WASM Hash (keccak256 of ID): ${wasmHash}`);
   console.log(`Schedule: ${REBALANCE_INTERVAL}\n`);
 
   console.log('Protocols:');
@@ -99,7 +83,7 @@ async function main() {
           target: '0x0000000000000000000000000000000000000000',
           abi: '',
           args: [],
-          wasmHash: keccak256(stringToBytes(wasmId)).toString().slice(2),
+          wasmHash: wasmHash,
           wasmId: wasmId,
           wasmInput: {
             action: 'rebalance',  // Explicit action (default if omitted)
