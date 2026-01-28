@@ -121,13 +121,21 @@ async function runWasmtimeOnce(params: {
   const child = spawn("wasmtime", wasmtimeArgs, {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
-    env: { 
-      ...process.env, 
+    env: {
+      ...process.env,
       XDG_CACHE_HOME: "/tmp",
       HOME: "/tmp",
     },
   });
-  
+
+  // Handle spawn errors (e.g., wasmtime not installed)
+  // This prevents the process from crashing when wasmtime is not found
+  let spawnError: Error | null = null;
+  child.on("error", (err: Error) => {
+    spawnError = err;
+    logger.error({ error: err }, "Failed to spawn wasmtime - is wasmtime installed?");
+  });
+
   // Start RPC request processor in background
   // Polls for RPC request files from WASM and processes them
   let rpcProcessor: NodeJS.Timeout | null = null;
@@ -192,7 +200,30 @@ async function runWasmtimeOnce(params: {
       // Don't stop RPC processor yet - let pending requests finish
       resolve(false);
     });
+
+    // Handle spawn error (e.g., wasmtime not found)
+    child.on("error", () => {
+      clearTimeout(t);
+      resolve(false); // Signal completion, spawnError variable will contain the error
+    });
   });
+
+  // Early return if spawn failed (e.g., wasmtime not installed)
+  if (spawnError) {
+    if (rpcProcessor) {
+      clearInterval(rpcProcessor);
+    }
+    try {
+      await fs.rm(workDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+    const err = spawnError as NodeJS.ErrnoException;
+    const errMsg = err.code === "ENOENT"
+      ? "wasmtime not found - please install wasmtime or run on a node with WASM support"
+      : `spawn error: ${err.message}`;
+    return { ok: false, error: errMsg, stderr: "" };
+  }
 
   // Grace period: let pending RPC calls complete before cleanup
   // This handles the case where WASM exits but RPC response is still in flight
