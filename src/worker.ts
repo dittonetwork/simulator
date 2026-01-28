@@ -701,7 +701,17 @@ class WorkflowProcessor {
         `0x${string}`,
       ];
 
-      const txData = AbiCoder.defaultAbiCoder().encode([tupleType], [packedOp]) as `0x${string}`;
+      // Encode packed userOp + contexts into data field
+      // Format: (packedUserOp, dataRefContext, wasmRefContext)
+      // Contexts are empty strings if not present
+      const txData = AbiCoder.defaultAbiCoder().encode(
+        [tupleType, 'string', 'string'],
+        [
+          packedOp,
+          simulationResult.dataRefContextSerialized || '',
+          simulationResult.wasmRefContextSerialized || '',
+        ]
+      ) as `0x${string}`;
 
       const message = AbiCoder.defaultAbiCoder().encode(
         ['string', 'bytes', 'address', 'uint16'],
@@ -723,7 +733,15 @@ class WorkflowProcessor {
       }
 
       try {
-        // Build params array - include dataRefContext for deterministic consensus
+        // Contexts are now embedded in txData field (see encoding above)
+        // This ensures they pass through the Othentic aggregator to validators
+        if (simulationResult.dataRefContextSerialized) {
+          this.log(`DataRef context embedded in data field for deterministic consensus`);
+        }
+        if (simulationResult.wasmRefContextSerialized) {
+          this.log(`WASM context embedded in data field: ${simulationResult.wasmRefContextSerialized.length} bytes`);
+        }
+
         const taskParams: any[] = [
           proofOfTask,
           txData,
@@ -733,21 +751,7 @@ class WorkflowProcessor {
           'ecdsa',
           targetChainId,
         ];
-        
-        // Add dataRefContext as optional 8th parameter if present
-        // Operators will use this to reproduce read-calls on the same blocks
-        if (simulationResult.dataRefContextSerialized) {
-          taskParams.push(simulationResult.dataRefContextSerialized);
-          this.log(`Including dataRefContext in task params for deterministic consensus`);
-        }
-        
-        // Add wasmRefContext as optional 9th parameter if present
-        // Operators will use this to reuse WASM results instead of re-executing WASM
-        if (simulationResult.wasmRefContextSerialized) {
-          taskParams.push(simulationResult.wasmRefContextSerialized);
-          this.log(`Including WASM context in task params: ${simulationResult.wasmRefContextSerialized.length} bytes`);
-        }
-        
+
         const response = await fetch(config.aggregatorURL, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
