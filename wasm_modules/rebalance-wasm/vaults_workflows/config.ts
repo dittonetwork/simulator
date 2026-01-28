@@ -83,9 +83,9 @@ export const POOL_ADDRESSES = [
 
 // ============ Timing Configuration ============
 
-export const GUARD_UPDATE_INTERVAL = '*/30 * * * *'; // Every 30 minutes
-export const REBALANCE_INTERVAL = '0 */12 * * *'; // Every 12 hours
-export const TIMEPOINT_INTERVAL = '0 */2 * * *'; // Every 2 hours
+export const GUARD_UPDATE_INTERVAL = '5,35 * * * *'; // Every 30 minutes (at :05 and :35)
+export const REBALANCE_INTERVAL = '15 */12 * * *'; // Every 12 hours (at :15)
+export const TIMEPOINT_INTERVAL = '0 */2 * * *'; // Every 2 hours (at :00)
 
 // ============ ABIs ============
 
