@@ -28,6 +28,7 @@
         "tsx": "^4.7.0",
         "uuid": "^9.0.0",
         "viem": "2.31.7",
+        "wasmtime": "^0.0.2",
         "zod": "^3.22.4",
       },
       "devDependencies": {
@@ -1474,6 +1475,16 @@
     "vitest": ["vitest@1.6.1", "", { "dependencies": { "@vitest/expect": "1.6.1", "@vitest/runner": "1.6.1", "@vitest/snapshot": "1.6.1", "@vitest/spy": "1.6.1", "@vitest/utils": "1.6.1", "acorn-walk": "^8.3.2", "chai": "^4.3.10", "debug": "^4.3.4", "execa": "^8.0.1", "local-pkg": "^0.5.0", "magic-string": "^0.30.5", "pathe": "^1.1.1", "picocolors": "^1.0.0", "std-env": "^3.5.0", "strip-literal": "^2.0.0", "tinybench": "^2.5.1", "tinypool": "^0.8.3", "vite": "^5.0.0", "vite-node": "1.6.1", "why-is-node-running": "^2.2.2" }, "peerDependencies": { "@edge-runtime/vm": "*", "@types/node": "^18.0.0 || >=20.0.0", "@vitest/browser": "1.6.1", "@vitest/ui": "1.6.1", "happy-dom": "*", "jsdom": "*" }, "optionalPeers": ["@edge-runtime/vm", "@types/node", "@vitest/browser", "@vitest/ui", "happy-dom", "jsdom"], "bin": { "vitest": "vitest.mjs" } }, "sha512-Ljb1cnSJSivGN0LqXd/zmDbWEM0RNNg2t1QW/XUhYl/qPqyu7CsqeWtqQXHVaJsecLPuDoak2oJcZN2QoRIOag=="],
 
     "walker": ["walker@1.0.8", "", { "dependencies": { "makeerror": "1.0.12" } }, "sha512-ts/8E8l5b7kY0vlWLewOkDXMmPdLcVV4GmOQLyxuSswIJsweeFZtAsMF7k1Nszz+TYBQrlYRmzOnr398y1JemQ=="],
+
+    "wasmtime": ["wasmtime@0.0.2", "", { "optionalDependencies": { "wasmtime-darwin-x64": "0.0.2", "wasmtime-linux-arm64-gnu": "0.0.2", "wasmtime-linux-x64-gnu": "0.0.2", "wasmtime-win32-x64-msvc": "0.0.2" } }, "sha512-M5lc3JhJA3GFw6B2GLk/dwDJl3+zifAiYTsSvLWqlDwPIqkkkOs4csG9+qusFMGPKoUsQTL4cHtLc8WMwRF4Gg=="],
+
+    "wasmtime-darwin-x64": ["wasmtime-darwin-x64@0.0.2", "", { "os": "darwin", "cpu": "x64" }, "sha512-cZNu1KeGd3D7tkjKU1ppcCA9sTyxn6vn/q41GGdgXG1yzhJGu94cytiEW6kgzaESzKN0Y7cXHIvXq3cJ88+BnQ=="],
+
+    "wasmtime-linux-arm64-gnu": ["wasmtime-linux-arm64-gnu@0.0.2", "", { "os": "linux", "cpu": "arm64" }, "sha512-u7WQHhqtUGdTwIy/4S/+W+1P93eHa0yCWnuldmCZJQ1qyk0E7AxrHV9zXcK5KM5VxAexAHw5/QsYIx9YL4l5Qg=="],
+
+    "wasmtime-linux-x64-gnu": ["wasmtime-linux-x64-gnu@0.0.2", "", { "os": "linux", "cpu": "x64" }, "sha512-IHkpISMHwsIQobkSpiW7A9+zsddIaE1IdfJDNvlhPRVUA2T7pqLOidYVNeQpmrmviv2VGR1F4EfS6zbE8ZxGHQ=="],
+
+    "wasmtime-win32-x64-msvc": ["wasmtime-win32-x64-msvc@0.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-14ZE2pAKaqjGdQrlO+0cb7yQHHwnF/JpJT6oKF2BQiCBShXvrkvXqWz5DTlhMhnEfw+KCIm/OdR+mDjW0Lsosw=="],
 
     "web3-utils": ["web3-utils@1.10.4", "", { "dependencies": { "@ethereumjs/util": "^8.1.0", "bn.js": "^5.2.1", "ethereum-bloom-filters": "^1.0.6", "ethereum-cryptography": "^2.1.2", "ethjs-unit": "0.1.6", "number-to-bn": "1.7.0", "randombytes": "^2.1.0", "utf8": "3.0.0" } }, "sha512-tsu8FiKJLk2PzhDl9fXbGUWTkkVXYhtTA+SmEFkKft+9BgwLxfCRpU96sWv7ICC8zixBNd3JURVoiR3dUXgP8A=="],
 

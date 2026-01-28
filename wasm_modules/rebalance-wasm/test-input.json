@@ -1,0 +1,56 @@
+{
+  "totalAssets": 10000000,
+  "protocols": [
+    {
+      "ourBalance": 2000000,
+      "poolSupply": 1000000000,
+      "poolBorrow": 800000000,
+      "utilization": 0.8,
+      "currentApy": 0.04,
+      "isBlocked": false,
+      "protocolType": 1
+    },
+    {
+      "ourBalance": 2000000,
+      "poolSupply": 500000000,
+      "poolBorrow": 400000000,
+      "utilization": 0.8,
+      "currentApy": 0.035,
+      "isBlocked": false,
+      "protocolType": 2
+    },
+    {
+      "ourBalance": 2000000,
+      "poolSupply": 200000000,
+      "poolBorrow": 170000000,
+      "utilization": 0.85,
+      "currentApy": 0.08,
+      "isBlocked": false,
+      "protocolType": 3
+    },
+    {
+      "ourBalance": 2000000,
+      "poolSupply": 300000000,
+      "poolBorrow": 240000000,
+      "utilization": 0.8,
+      "currentApy": 0.06,
+      "isBlocked": false,
+      "protocolType": 4
+    },
+    {
+      "ourBalance": 2000000,
+      "poolSupply": 400000000,
+      "poolBorrow": 320000000,
+      "utilization": 0.8,
+      "currentApy": 0.055,
+      "isBlocked": false,
+      "protocolType": 4
+    }
+  ],
+  "blockedMask": 0,
+  "config": {
+    "stepPct": 1,
+    "maxPoolShare": 0.2,
+    "minAllocation": 1000
+  }
+}

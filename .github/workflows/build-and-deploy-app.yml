@@ -54,7 +54,7 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build, tag, and push simulator image to Amazon ECR
         id: build-image
         env:
           IMAGE_NAME: ${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.ref_name }}_${{ needs.prepare.outputs.version }}
@@ -65,6 +65,18 @@ jobs:
             -f ./Dockerfile \
             --tag $IMAGE_NAME .
           docker push $IMAGE_NAME
+      
+      - name: Build, tag, and push WASM sandbox image to Amazon ECR
+        id: build-wasm-image
+        env:
+          WASM_IMAGE_NAME: ${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}-wasmtime:${{ github.ref_name }}_${{ needs.prepare.outputs.version }}
+        run: |
+          docker build \
+            --build-arg COMMIT_HASH=${GITHUB_SHA} \
+            --build-arg BUILD_TAG=${{ github.ref_name }}_${{ needs.prepare.outputs.version }} \
+            -f ./Dockerfile.wasmtime \
+            --tag $WASM_IMAGE_NAME .
+          docker push $WASM_IMAGE_NAME
 
   deploy:
     runs-on: ubuntu-latest
@@ -120,11 +132,12 @@ jobs:
         FILE_ENV: ${{ secrets.ENV_FILE }}
         VERSION: ${{ needs.prepare.outputs.version }}
       run: |
-          version="${{ inputs.version }}"
-          version="${{ inputs.version }}"
           ref_name="${{ github.ref_name }}"
           environment=${{ inputs.environment }}
+          image_tag="${ref_name}_${VERSION}"
           helm upgrade --install -n epsilon \
             -f .devops/helm/values-$environment.yaml \
-            --set image.tag="${ref_name}_${VERSION}" ${{ env.SERVICE_NAME }} \
+            --set image.tag="${image_tag}" \
+            --set wasmSandbox.image.tag="${image_tag}" \
+            ${{ env.SERVICE_NAME }} \
             .devops/helm/

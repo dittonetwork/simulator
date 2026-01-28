@@ -1,0 +1,482 @@
+import http from "node:http";
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import os from "node:os";
+import express from "express";
+import { getLogger } from './logger.js';
+
+const logger = getLogger('WasmSandbox');
+
+type RunRequest = {
+  jobId: string;
+  wasmHash?: string;            // hex sha256 (optional, but better to send)
+  wasmB64: string;              // bytes wasm in base64
+  input: unknown;               // JSON, will go to stdin
+  timeoutMs: number;            // n ms
+  maxStdoutBytes?: number;      // default 256KB
+  maxStderrBytes?: number;      // default 256KB
+  maxWasmBytes?: number;        // default 10MB (can be overridden in request, but usually fixed on server)
+};
+
+type RunResponse =
+  | { jobId: string; ok: true; result: unknown; stderr: string; durationMs: number }
+  | { jobId: string; ok: false; error: string; stderr?: string; durationMs: number };
+
+const PORT = Number(process.env.PORT ?? "8080");
+const CACHE_DIR = process.env.WASM_CACHE_DIR ?? "/tmp/wasm-cache";
+
+// Server limits (we don't let clients extend them)
+const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? String(12 * 1024 * 1024)); // 12MB
+const MAX_WASM_BYTES = Number(process.env.MAX_WASM_BYTES ?? String(10 * 1024 * 1024)); // 10MB
+const DEFAULT_MAX_STDOUT = Number(process.env.MAX_STDOUT_BYTES ?? String(256 * 1024));
+const DEFAULT_MAX_STDERR = Number(process.env.MAX_STDERR_BYTES ?? String(256 * 1024));
+const MAX_TIMEOUT_MS = Number(process.env.MAX_TIMEOUT_MS ?? "2000"); // protection: we don't allow 60s
+
+function sha256Hex(buf: Buffer): string {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+function isHexSha256(s: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(s);
+}
+
+async function ensureCacheDir() {
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+}
+
+async function atomicWriteFile(finalPath: string, data: Buffer) {
+  const dir = path.dirname(finalPath);
+  const tmpPath = path.join(dir, `.${path.basename(finalPath)}.${crypto.randomUUID()}.tmp`);
+  await fs.writeFile(tmpPath, data, { mode: 0o444 });
+  await fs.rename(tmpPath, finalPath);
+}
+
+async function getOrCreateCachedWasm(wasmBytes: Buffer, expectedHash?: string): Promise<{ hash: string; filePath: string }> {
+  const hash = sha256Hex(wasmBytes);
+
+  if (expectedHash && expectedHash.toLowerCase() !== hash) {
+    throw new Error(`wasmHash mismatch (expected ${expectedHash}, got ${hash})`);
+  }
+
+  // split into subfolders to avoid 1e6 files in one place
+  const subdir = path.join(CACHE_DIR, hash.slice(0, 2));
+  await fs.mkdir(subdir, { recursive: true });
+
+  const filePath = path.join(subdir, `${hash}.wasm`);
+
+  try {
+    await fs.access(filePath);
+    return { hash, filePath }; // already exists
+  } catch {
+    // not exists — create
+  }
+
+  await atomicWriteFile(filePath, wasmBytes);
+  return { hash, filePath };
+}
+
+async function runWasmtimeOnce(params: {
+  wasmPath: string;
+  input: unknown;
+  timeoutMs: number;
+  maxStdoutBytes: number;
+  maxStderrBytes: number;
+}): Promise<{ ok: true; result: unknown; stderr: string } | { ok: false; error: string; stderr?: string }> {
+  // Create a temporary work directory for RPC communication
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-rpc-'));
+  
+  // Ensure workDir is writable (chmod 777)
+  await fs.chmod(workDir, 0o777);
+  
+  // Log directory info for debugging
+  const dirStats = await fs.stat(workDir);
+  logger.info({ 
+    workDir, 
+    mode: dirStats.mode.toString(8),
+    uid: dirStats.uid,
+    gid: dirStats.gid,
+  }, 'Created RPC work directory');
+  
+  // wasmtime WASI: --dir preopens a directory
+  // The directory is accessible at the SAME path inside WASM
+  // So if workDir is /tmp/wasm-rpc-xxx, WASM can write to /tmp/wasm-rpc-xxx/file.json
+  const wasmtimeArgs = [
+    "run",
+    "--invoke", "run",
+    "--dir", workDir, // Preopen workDir at same path
+    "--env", `WASM_RPC_WORK_DIR=${workDir}`, // WASM uses full path
+    "--env", "WASM_RPC_REQUEST_FILE=wasm_rpc_request.json",
+    "--env", "WASM_RPC_RESPONSE_FILE=wasm_rpc_response.json",
+    params.wasmPath,
+  ];
+  
+  logger.info({ 
+    wasmtimeCmd: `wasmtime ${wasmtimeArgs.join(' ')}`,
+    wasmPath: params.wasmPath,
+    input: JSON.stringify(params.input).substring(0, 200),
+  }, 'Spawning wasmtime');
+  
+  const child = spawn("wasmtime", wasmtimeArgs, {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+    env: {
+      ...process.env,
+      XDG_CACHE_HOME: "/tmp",
+      HOME: "/tmp",
+    },
+  });
+
+  // Handle spawn errors (e.g., wasmtime not installed)
+  // This prevents the process from crashing when wasmtime is not found
+  let spawnError: Error | null = null;
+  child.on("error", (err: Error) => {
+    spawnError = err;
+    logger.error({ error: err }, "Failed to spawn wasmtime - is wasmtime installed?");
+  });
+
+  // Start RPC request processor in background
+  // Polls for RPC request files from WASM and processes them
+  let rpcProcessor: NodeJS.Timeout | null = null;
+  let rpcTicks = 0;
+  let rpcFilesFound = 0;
+  const requestPath = `${workDir}/wasm_rpc_request.json`;
+  
+  try {
+    const { processWasmRpcRequests } = await import('./utils/wasmHostBridge.js');
+    
+    rpcProcessor = setInterval(async () => {
+      rpcTicks++;
+      try {
+        // Check if WASM wrote a request file
+        await fs.access(requestPath);
+        rpcFilesFound++;
+        logger.info({ requestPath, rpcTicks }, 'RPC request file found');
+        await processWasmRpcRequests(workDir);
+      } catch (err: any) {
+        // ENOENT is expected - no request file yet
+        if (err.code !== 'ENOENT') {
+          logger.error({ error: err, workDir }, 'RPC processor error');
+        }
+      }
+    }, 10); // Poll every 10ms
+  } catch (error) {
+    logger.error({ error }, 'Failed to load RPC bridge');
+  }
+
+  let stdout = Buffer.alloc(0);
+  let stderr = Buffer.alloc(0);
+  let killedForOutputLimit = false;
+
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout = Buffer.concat([stdout, chunk]);
+    if (stdout.length > params.maxStdoutBytes) {
+      killedForOutputLimit = true;
+      child.kill("SIGKILL");
+    }
+  });
+
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr = Buffer.concat([stderr, chunk]);
+    if (stderr.length > params.maxStderrBytes) {
+      killedForOutputLimit = true;
+      child.kill("SIGKILL");
+    }
+  });
+
+  // stdin: 1 JSON line
+  child.stdin.write(JSON.stringify(params.input) + "\n");
+  child.stdin.end();
+
+  const killedByTimeout = await new Promise<boolean>((resolve) => {
+    const t = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve(true);
+    }, params.timeoutMs);
+
+    child.on("exit", () => {
+      clearTimeout(t);
+      // Don't stop RPC processor yet - let pending requests finish
+      resolve(false);
+    });
+
+    // Handle spawn error (e.g., wasmtime not found)
+    child.on("error", () => {
+      clearTimeout(t);
+      resolve(false); // Signal completion, spawnError variable will contain the error
+    });
+  });
+
+  // Early return if spawn failed (e.g., wasmtime not installed)
+  if (spawnError) {
+    if (rpcProcessor) {
+      clearInterval(rpcProcessor);
+    }
+    try {
+      await fs.rm(workDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+    const err = spawnError as NodeJS.ErrnoException;
+    const errMsg = err.code === "ENOENT"
+      ? "wasmtime not found - please install wasmtime or run on a node with WASM support"
+      : `spawn error: ${err.message}`;
+    return { ok: false, error: errMsg, stderr: "" };
+  }
+
+  // Grace period: let pending RPC calls complete before cleanup
+  // This handles the case where WASM exits but RPC response is still in flight
+  if (rpcFilesFound > 0) {
+    logger.info({ rpcFilesFound, workDir }, 'Waiting for pending RPC responses');
+    await new Promise(resolve => setTimeout(resolve, 500)); // 500ms grace period
+  }
+  
+  // Stop RPC processor and clean up
+  if (rpcProcessor) {
+    clearInterval(rpcProcessor);
+  }
+  try {
+    await fs.rm(workDir, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup errors
+  }
+
+  const stderrStr = stderr.toString("utf8");
+
+  logger.info({ 
+    wasmPath: params.wasmPath,
+    killedByTimeout, 
+    killedForOutputLimit,
+    exitCode: child.exitCode,
+    stdoutLen: stdout.length,
+    stderrLen: stderr.length,
+    rpcTicks,
+    rpcFilesFound,
+    workDir,
+  }, 'WASM execution finished');
+
+  if (killedForOutputLimit) {
+    logger.warn({ wasmPath: params.wasmPath }, 'WASM killed: stdout/stderr size limit exceeded');
+    return { ok: false, error: "killed: stdout/stderr size limit exceeded", stderr: stderrStr };
+  }
+  if (killedByTimeout) {
+    logger.warn({ wasmPath: params.wasmPath, timeoutMs: params.timeoutMs }, 'WASM killed: timeout');
+    return { ok: false, error: `timeout after ${params.timeoutMs}ms`, stderr: stderrStr };
+  }
+  if (child.exitCode !== 0) {
+    logger.warn({ wasmPath: params.wasmPath, exitCode: child.exitCode, stderr: stderrStr }, 'WASM exited with non-zero code');
+    return { ok: false, error: `exit code ${child.exitCode}`, stderr: stderrStr };
+  }
+
+  const outStr = stdout.toString("utf8").trim();
+  if (!outStr) {
+    return { ok: false, error: "empty stdout", stderr: stderrStr };
+  }
+
+  // take the first non-empty line to avoid breaking from extra \n
+  const line = outStr.split("\n").map((x) => x.trim()).find(Boolean);
+  if (!line) {
+    return { ok: false, error: "no JSON line in stdout", stderr: stderrStr };
+  }
+
+  try {
+    const parsed = JSON.parse(line);
+    logger.info({ wasmPath: params.wasmPath, resultKeys: Object.keys(parsed || {}) }, 'WASM execution successful');
+    return { ok: true, result: parsed, stderr: stderrStr };
+  } catch (e) {
+    logger.error({ wasmPath: params.wasmPath, stdout: line.substring(0, 500) }, 'WASM stdout is not valid JSON');
+    return { ok: false, error: `stdout is not JSON: ${(e as Error).message}`, stderr: stderrStr };
+  }
+}
+
+function readJsonBody(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error(`body too large (>${MAX_BODY_BYTES} bytes)`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      try {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        resolve(JSON.parse(raw));
+      } catch (e) {
+        reject(new Error(`invalid JSON body: ${(e as Error).message}`));
+      }
+    });
+
+    req.on("error", (e) => reject(e));
+  });
+}
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown) {
+  const data = Buffer.from(JSON.stringify(body));
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("content-length", String(data.length));
+  res.end(data);
+}
+
+async function handleRun(req: http.IncomingMessage, res: http.ServerResponse) {
+  const started = Date.now();
+  let jobId = "unknown";
+
+  try {
+    const body = (await readJsonBody(req)) as RunRequest;
+    jobId = body.jobId ?? "unknown";
+
+    if (!body.jobId || typeof body.wasmB64 !== "string" || typeof body.timeoutMs !== "number") {
+      const resp: RunResponse = { jobId, ok: false, error: "bad request", durationMs: Date.now() - started };
+      return sendJson(res, 400, resp);
+    }
+
+    const timeoutMs = Math.min(Math.max(1, body.timeoutMs), MAX_TIMEOUT_MS);
+    const maxStdoutBytes = Math.min(body.maxStdoutBytes ?? DEFAULT_MAX_STDOUT, DEFAULT_MAX_STDOUT);
+    const maxStderrBytes = Math.min(body.maxStderrBytes ?? DEFAULT_MAX_STDERR, DEFAULT_MAX_STDERR);
+
+    const wasmBytes = Buffer.from(body.wasmB64, "base64");
+    if (wasmBytes.length === 0) {
+      const resp: RunResponse = { jobId, ok: false, error: "empty wasm bytes", durationMs: Date.now() - started };
+      return sendJson(res, 400, resp);
+    }
+    if (wasmBytes.length > MAX_WASM_BYTES) {
+      const resp: RunResponse = { jobId, ok: false, error: `wasm too large (> ${MAX_WASM_BYTES} bytes)`, durationMs: Date.now() - started };
+      return sendJson(res, 413, resp);
+    }
+
+    const expectedHash = body.wasmHash;
+    if (expectedHash && !isHexSha256(expectedHash)) {
+      const resp: RunResponse = { jobId, ok: false, error: "wasmHash must be 64 hex chars (sha256)", durationMs: Date.now() - started };
+      return sendJson(res, 400, resp);
+    }
+
+    await ensureCacheDir();
+    const { filePath } = await getOrCreateCachedWasm(wasmBytes, expectedHash);
+
+    const exec = await runWasmtimeOnce({
+      wasmPath: filePath,
+      input: body.input,
+      timeoutMs,
+      maxStdoutBytes,
+      maxStderrBytes,
+    });
+
+    const durationMs = Date.now() - started;
+
+    if (!exec.ok) {
+      const resp: RunResponse = { jobId, ok: false, error: exec.error, stderr: exec.stderr, durationMs };
+      return sendJson(res, 200, resp);
+    }
+
+    const resp: RunResponse = { jobId, ok: true, result: exec.result, stderr: exec.stderr, durationMs };
+    return sendJson(res, 200, resp);
+  } catch (e) {
+    const durationMs = Date.now() - started;
+    const resp: RunResponse = { jobId, ok: false, error: (e as Error).message, durationMs };
+    return sendJson(res, 500, resp);
+  }
+}
+
+// Express route handlers for integration
+export async function wasmHealthHandler(req: express.Request, res: express.Response) {
+  sendJson(res, 200, { ok: true });
+}
+
+export async function wasmRunHandler(req: express.Request, res: express.Response) {
+  const started = Date.now();
+  let jobId = "unknown";
+
+  try {
+    // Express has already parsed the body, so we can use it directly
+    const body = req.body as RunRequest;
+    jobId = body.jobId ?? "unknown";
+    
+    logger.info({ jobId, wasmHash: body.wasmHash, timeoutMs: body.timeoutMs, inputKeys: Object.keys(body.input || {}) }, 'Received WASM run request');
+
+    if (!body.jobId || typeof body.wasmB64 !== "string" || typeof body.timeoutMs !== "number") {
+      const resp: RunResponse = { jobId, ok: false, error: "bad request", durationMs: Date.now() - started };
+      return res.status(400).json(resp);
+    }
+
+    const timeoutMs = Math.min(Math.max(1, body.timeoutMs), MAX_TIMEOUT_MS);
+    const maxStdoutBytes = Math.min(body.maxStdoutBytes ?? DEFAULT_MAX_STDOUT, DEFAULT_MAX_STDOUT);
+    const maxStderrBytes = Math.min(body.maxStderrBytes ?? DEFAULT_MAX_STDERR, DEFAULT_MAX_STDERR);
+
+    const wasmBytes = Buffer.from(body.wasmB64, "base64");
+    if (wasmBytes.length === 0) {
+      const resp: RunResponse = { jobId, ok: false, error: "empty wasm bytes", durationMs: Date.now() - started };
+      return res.status(400).json(resp);
+    }
+    if (wasmBytes.length > MAX_WASM_BYTES) {
+      const resp: RunResponse = { jobId, ok: false, error: `wasm too large (> ${MAX_WASM_BYTES} bytes)`, durationMs: Date.now() - started };
+      return res.status(413).json(resp);
+    }
+
+    const expectedHash = body.wasmHash;
+    if (expectedHash && !isHexSha256(expectedHash)) {
+      const resp: RunResponse = { jobId, ok: false, error: "wasmHash must be 64 hex chars (sha256)", durationMs: Date.now() - started };
+      return res.status(400).json(resp);
+    }
+
+    await ensureCacheDir();
+    const { filePath } = await getOrCreateCachedWasm(wasmBytes, expectedHash);
+
+    const exec = await runWasmtimeOnce({
+      wasmPath: filePath,
+      input: body.input,
+      timeoutMs,
+      maxStdoutBytes,
+      maxStderrBytes,
+    });
+
+    const durationMs = Date.now() - started;
+
+    if (!exec.ok) {
+      const resp: RunResponse = { jobId, ok: false, error: exec.error, stderr: exec.stderr, durationMs };
+      return res.status(200).json(resp);
+    }
+
+    const resp: RunResponse = { jobId, ok: true, result: exec.result, stderr: exec.stderr, durationMs };
+    return res.status(200).json(resp);
+  } catch (e) {
+    const durationMs = Date.now() - started;
+    const resp: RunResponse = { jobId, ok: false, error: (e as Error).message, durationMs };
+    return res.status(500).json(resp);
+  }
+}
+
+// Standalone server mode (if run directly)
+async function main() {
+  await ensureCacheDir();
+
+  const server = http.createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/health") {
+      return sendJson(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && req.url === "/run") {
+      return void handleRun(req, res);
+    }
+    sendJson(res, 404, { error: "not found" });
+  });
+
+  server.listen(PORT, () => {
+    console.log(`sandbox runner listening on :${PORT}`);
+  });
+}
+
+// Only run standalone if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

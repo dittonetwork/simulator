@@ -192,4 +192,110 @@ export class Database {
       this.db = null;
     }
   }
+
+  /**
+   * Store WASM module bytes in database indexed by hash
+   */
+  async storeWasmModule(wasmHash: string, wasmBytes: Buffer): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    await this.db.collection(COLLECTIONS.WASM_MODULES).updateOne(
+      { wasm_id: wasmHash },
+      {
+        $set: {
+          wasm_id: wasmHash,
+          wasm_code: wasmBytes,
+          wasm_code_size: wasmBytes.length,
+          has_wasm: true,
+          storedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+  }
+
+  /**
+   * Retrieve WASM module bytes from database by hash
+   */
+  async getWasmModule(wasmHash: string): Promise<Buffer | null> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const doc = await this.db.collection(COLLECTIONS.WASM_MODULES).findOne(
+      { wasm_id: wasmHash },
+      { projection: { wasm_code: 1 } }
+    );
+
+    if (!doc || !doc.wasm_code) {
+      return null;
+    }
+
+    // Handle Buffer type
+    if (Buffer.isBuffer(doc.wasm_code)) {
+      return doc.wasm_code;
+    }
+
+    // Handle MongoDB Binary type with $binary format
+    if (doc.wasm_code && doc.wasm_code.$binary) {
+      const base64Data = doc.wasm_code.$binary.base64;
+      return Buffer.from(base64Data, 'base64');
+    }
+
+    // Handle MongoDB Binary type (legacy format)
+    if (doc.wasm_code && typeof doc.wasm_code.buffer === 'object') {
+      return Buffer.from(doc.wasm_code.buffer);
+    }
+
+    // Handle base64 string (common storage format)
+    if (typeof doc.wasm_code === 'string') {
+      try {
+        return Buffer.from(doc.wasm_code, 'base64');
+      } catch (error) {
+        // If base64 decode fails, try treating as hex
+        try {
+          return Buffer.from(doc.wasm_code, 'hex');
+        } catch {
+          return null;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if WASM module exists in database
+   */
+  async hasWasmModule(wasmHash: string): Promise<boolean> {
+    if (!this.db) throw new Error('Database not connected');
+    const count = await this.db.collection(COLLECTIONS.WASM_MODULES).countDocuments(
+      { wasm_id: wasmHash },
+      { limit: 1 }
+    );
+    return count > 0;
+  }
+
+  /**
+   * Check if an owner address is whitelisted for WASM execution
+   * Checks both environment variable whitelist and database collection
+   */
+  async isWasmWhitelisted(ownerAddress: string, configWhitelist?: string[]): Promise<boolean> {
+    if (!this.db) throw new Error('Database not connected');
+    
+    const normalizedOwner = ownerAddress.toLowerCase();
+    
+    // Check config whitelist first (from environment variable)
+    if (configWhitelist && configWhitelist.length > 0) {
+      if (configWhitelist.includes(normalizedOwner)) {
+        return true;
+      }
+    }
+    
+    // Check database whitelist collection
+    const whitelistDoc = await this.db.collection(COLLECTIONS.WASM_WHITELIST).findOne(
+      { owner: normalizedOwner, enabled: true },
+      { projection: { _id: 1 } }
+    );
+    
+    return !!whitelistDoc;
+  }
 }

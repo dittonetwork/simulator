@@ -1,0 +1,22 @@
+{
+  "name": "vaults-workflows",
+  "version": "0.1.0",
+  "description": "Vault automation workflows for YieldSplitVault",
+  "type": "module",
+  "scripts": {
+    "guard-updates": "bun run guard-updates-workflow.ts",
+    "rebalance": "bun run rebalance-workflow.ts",
+    "timepoints": "bun run timepoints-workflow.ts",
+    "emergency": "bun run emergency-workflow.ts",
+    "all": "bun run guard-updates && bun run rebalance && bun run timepoints && bun run emergency"
+  },
+  "dependencies": {
+    "@ditto/workflow-sdk": "workspace:*",
+    "dotenv": "^16.0.3",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,66 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
+# Copy package files first
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy all source files (including SDK if it exists)
+COPY . .
+
+# Initialize and update submodules if needed
+RUN git submodule update --init --recursive || true
+
+# Build SDK workspace first (if it exists)
+RUN if [ -d "ditto-workflow-sdk" ]; then \
+      cd ditto-workflow-sdk && npm install && npm run build && cd ..; \
+    fi
+
+# Build simulator
+RUN npm run build
+
+FROM debian:bookworm-slim
+
+ARG WASMTIME_VERSION=27.0.0
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        WASM_ARCH="x86_64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        WASM_ARCH="aarch64"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -L "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-${WASM_ARCH}-linux.tar.xz" \
+    | tar -xJ --strip-components=1 -C /usr/local/bin --wildcards '*/wasmtime' \
+    && chmod +x /usr/local/bin/wasmtime \
+    && wasmtime --version
+
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+# Copy SDK dist and package.json (needed for @ditto/workflow-sdk imports)
+COPY --from=build /app/ditto-workflow-sdk ./ditto-workflow-sdk
+
+RUN useradd -u 10001 -m runner
+USER 10001
+
+ENV PORT=8081
+ENV HTTP_PORT=8081
+EXPOSE 8081
+
+CMD ["node", "dist/sandbox.js"]

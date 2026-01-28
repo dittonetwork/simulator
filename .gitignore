@@ -38,3 +38,26 @@ coverage/
 *.nyc_output/
 *.tsbuildinfo
 package-lock.json
+
+# Rust build artifacts
+# Ignore all target directories (Rust build output)
+**/target/
+# But keep the final built WASM binaries in examples/wasm/
+!examples/wasm/*.wasm
+
+# Rust lock files (can be regenerated, but keep root Cargo.lock if it exists)
+examples/**/Cargo.lock
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+# WASM cache and temporary directories
+wasm-cache/
+/tmp/
+*.wasm.tmp
+*.wasm

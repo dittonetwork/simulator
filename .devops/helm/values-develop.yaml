@@ -135,3 +135,111 @@ env:
   AGGREGATOR_URL: "http://othentic-node-internal.epsilon.svc.cluster.local:8545"
   OTHENTIC_FLOW: "true"
   OTHENTIC_EXECUTOR_ADDRESS: "0xF177179963aA0EDE80Be4396d04d970171CF6a36"
+  WASM_SERVER_URL: "http://simulator-wasm-sandbox.epsilon.svc.cluster.local:8081"
+  WASM_WHITELIST_ENABLED: "true"
+  WASM_WHITELIST_ADDRESSES: "0x3813fc5E352e8b9e592a40BcC0BcC94F0cfFF6B3"
+
+# WASM Sandbox Configuration
+# Note: The WASM sandbox requires an image built from Dockerfile.wasmtime (includes wasmtime runtime).
+# This is different from the regular simulator image which uses Dockerfile.
+# The build workflow should build both images:
+# - simulator:1.16.0 (from Dockerfile)
+# - simulator-wasmtime:1.16.0 (from Dockerfile.wasmtime)
+wasmSandbox:
+  enabled: true
+  replicaCount: 1
+  
+  image:
+    repository: 847647377987.dkr.ecr.eu-central-1.amazonaws.com/epsilon/simulator-wasmtime
+    pullPolicy: IfNotPresent
+    tag: ""  # Uses Chart.AppVersion if not set. Should match simulator version (e.g., "1.16.0")
+  
+  service:
+    type: ClusterIP
+    port: 8081
+  
+  # Environment variables for WASM sandbox (minimal - only what sandbox needs)
+  env:
+    PORT: "8081"
+    HTTP_PORT: "8081"
+    WASM_CACHE_DIR: "/tmp/wasm-cache"
+    # Execution limits
+    MAX_BODY_BYTES: "12582912"  # 12MB
+    MAX_WASM_BYTES: "10485760"  # 10MB
+    MAX_STDOUT_BYTES: "262144"  # 256KB
+    MAX_STDERR_BYTES: "262144"  # 256KB
+    MAX_TIMEOUT_MS: "5000"      # 5s for RPC calls
+    # RPC proxy through simulator (sandbox has no direct external network access)
+    RPC_PROXY_URL: "http://simulator.epsilon.svc.cluster.local:8080/rpc/proxy"
+  
+  # Security context for WASM sandbox (read-only root filesystem recommended)
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+  
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+  
+  # Resources for WASM sandbox
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+  
+  # Volume mounts for WASM cache and temp directory (tmpfs)
+  volumeMounts:
+    - name: wasm-cache
+      mountPath: /tmp/wasm-cache
+    - name: tmp-dir
+      mountPath: /tmp
+  
+  volumes:
+    - name: wasm-cache
+      emptyDir:
+        sizeLimit: 128Mi
+    - name: tmp-dir
+      emptyDir:
+        sizeLimit: 128Mi
+  
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /wasm/health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /wasm/health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  # Autoscaling
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+  
+  # Node selector, tolerations, affinity (inherit from main if needed)
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+  # Pod annotations and labels
+  podAnnotations: {}
+  podLabels: {}

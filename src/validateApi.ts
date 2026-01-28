@@ -6,6 +6,9 @@ import { AbiCoder } from 'ethers';
 import { getConfig } from './config.js';
 import EventMonitor from './eventMonitor.js';
 import { bigIntToString } from './utils.js';
+import { createWasmClient, WasmClient } from './utils/wasmClient.js';
+import { deserializeDataRefContext, deserializeWasmRefContext } from '@ditto/workflow-sdk';
+import { Database } from './db.js';
 
 const logger = getLogger('ValidateAPI');
 const router: Router = Router();
@@ -13,6 +16,27 @@ const router: Router = Router();
 const isProd = process.env.IS_PROD === 'true';
 const ipfsServiceUrl = process.env.IPFS_SERVICE_URL || '';
 const config = getConfig();
+
+// Initialize database for WASM module lookup (needed for reference resolution in operator mode)
+const db = new Database();
+
+// Initialize WASM client if server URL is configured
+const wasmClient = config.wasmServerUrl ? createWasmClient() : null;
+if (wasmClient) {
+  logger.info(`WASM client initialized for server: ${config.wasmServerUrl}`);
+  // Health check on startup
+  wasmClient.healthCheck().then(healthy => {
+    if (healthy) {
+      logger.info('WASM server health check passed');
+    } else {
+      logger.warn('WASM server health check failed - validation may not work');
+    }
+  }).catch(err => {
+    logger.warn({ error: err }, 'WASM server health check error');
+  });
+} else {
+  logger.info('WASM validation disabled (WASM_SERVER_URL not set)');
+}
 
 type Hex = `0x${string}`;
 type PackedUserOperation = {
@@ -30,12 +54,22 @@ type PackedUserOperation = {
 // Tuple type for packed user operation: (address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)
 const tupleType = '(address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)';
 
+// Extended tuple type with contexts: (packedUserOp, dataRefContext, wasmRefContext)
+const extendedTupleType = [tupleType, 'string', 'string'];
+
+type ParsedData = {
+  packedUserOp: PackedUserOperation;
+  dataRefContextSerialized?: string;
+  wasmRefContextSerialized?: string;
+};
+
 /**
  * Parse the encoded tuple data from the validation request
+ * Supports both old format (just packedUserOp) and new format (with contexts)
  * @param data - The encoded tuple data as hex string
- * @returns Parsed PackedUserOperation or null if parsing fails
+ * @returns Parsed data or null if parsing fails
  */
-function parseTupleData(data: string): PackedUserOperation | null {
+function parseTupleData(data: string): ParsedData | null {
   try {
     if (!data || typeof data !== 'string' || !data.startsWith('0x')) {
       logger.warn('[ValidateAPI] Invalid data format: must be a hex string');
@@ -43,14 +77,32 @@ function parseTupleData(data: string): PackedUserOperation | null {
     }
 
     const abiCoder = AbiCoder.defaultAbiCoder();
-    const decoded = abiCoder.decode([tupleType], data);
-    
-    if (!decoded || decoded.length === 0) {
-      logger.warn('[ValidateAPI] Failed to decode tuple data');
-      return null;
+
+    // Try new format first (with contexts)
+    let tupleData: any;
+    let dataRefContextSerialized: string | undefined;
+    let wasmRefContextSerialized: string | undefined;
+
+    try {
+      const decoded = abiCoder.decode(extendedTupleType, data);
+      tupleData = decoded[0];
+      dataRefContextSerialized = decoded[1] as string || undefined;
+      wasmRefContextSerialized = decoded[2] as string || undefined;
+
+      if (dataRefContextSerialized || wasmRefContextSerialized) {
+        logger.info(`[ValidateAPI] Decoded extended format with contexts: dataRef=${!!dataRefContextSerialized}, wasmRef=${!!wasmRefContextSerialized}`);
+      }
+    } catch {
+      // Fall back to old format (just packedUserOp)
+      const decoded = abiCoder.decode([tupleType], data);
+      if (!decoded || decoded.length === 0) {
+        logger.warn('[ValidateAPI] Failed to decode tuple data');
+        return null;
+      }
+      tupleData = decoded[0];
+      logger.info('[ValidateAPI] Decoded legacy format (no contexts)');
     }
 
-    const tupleData = decoded[0];
     const packedUserOp: PackedUserOperation = {
       sender: tupleData[0] as Hex,
       nonce: tupleData[1] as bigint,
@@ -75,7 +127,11 @@ function parseTupleData(data: string): PackedUserOperation | null {
       signature: packedUserOp.signature
     })}`);
 
-    return packedUserOp;
+    return {
+      packedUserOp,
+      dataRefContextSerialized: dataRefContextSerialized || undefined,
+      wasmRefContextSerialized: wasmRefContextSerialized || undefined,
+    };
   } catch (error) {
     logger.error({ error }, '[ValidateAPI] Failed to parse tuple data');
     return null;
@@ -110,8 +166,13 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       return res.status(200).json({ data: false, error: true, message: 'proofOfTask is required and must be a string' });
     }
 
-    // proofOfTask format: "ipfsHash_nextSimulationTime_chainID"
-    const [ipfsHash, nextSimulationTimeStr, chainIdStr] = String(proofOfTask).split('_');
+    // proofOfTask format: "ipfsHash_nextSimulationTime_chainID[_dataRefHash][_wasmRefHash]"
+    // Parse proofOfTask - may include optional context hashes
+    const parts = String(proofOfTask).split('_');
+    const ipfsHash = parts[0];
+    const nextSimulationTimeStr = parts[1];
+    const chainIdStr = parts[2];
+    // Optional: parts[3] = dataRefHash, parts[4] = wasmRefHash
     if (!ipfsHash) {
       logger.warn('[ValidateAPI] Invalid proofOfTask: missing ipfsHash');
       return res.status(200).json({ data: false, error: true, message: 'Invalid proofOfTask: missing ipfsHash' });
@@ -181,17 +242,58 @@ router.post('/task/validate', async (req: Request, res: Response) => {
 
     // TODO check performer in leader election function
 
-    const sdk = getWorkflowSDKService();
+    // Parse the data field early to extract contexts (embedded by performer)
+    // This is how contexts pass through the Othentic aggregator to validators
+    const parsedData = parseTupleData(data);
+    if (!parsedData) {
+      logger.warn(`[ValidateAPI] Failed to parse data field for ipfsHash=${ipfsHash}`);
+      return res.status(200).json({ data: false, error: true, message: 'Failed to parse data field' });
+    }
+
+    // Extract contexts from parsed data (embedded by performer in the data field)
+    let dataRefContext = undefined;
+    let wasmRefContext = undefined;
+
+    if (parsedData.dataRefContextSerialized) {
+      try {
+        dataRefContext = deserializeDataRefContext(parsedData.dataRefContextSerialized);
+        logger.info(`[ValidateAPI] Using embedded dataRefContext (operator mode)`);
+      } catch (error) {
+        logger.warn({ error }, `[ValidateAPI] Failed to deserialize dataRefContext, will create new context`);
+      }
+    }
+
+    if (parsedData.wasmRefContextSerialized) {
+      try {
+        wasmRefContext = deserializeWasmRefContext(parsedData.wasmRefContextSerialized);
+        logger.info(`[ValidateAPI] Using embedded wasmRefContext (operator mode) - ${wasmRefContext.resolvedRefs.length} WASM results`);
+      } catch (error) {
+        logger.warn({ error }, `[ValidateAPI] Failed to deserialize wasmRefContext, will execute WASM fresh`);
+      }
+    }
+
+    // Ensure database is connected for WASM reference resolution (needed even in operator mode)
+    await db.connect();
+
+    // Pass database to SDK service for WASM reference resolution
+    // In operator mode (wasmRefContext provided), WASM won't be executed, only references resolved
+    const sdk = getWorkflowSDKService(undefined, db);
     // Ensure we have an access token and pass it through
     await reportingClient.initialize();
     const accessToken = reportingClient.getAccessToken();
     const workflowData = await sdk.loadWorkflowData(ipfsHash);
+
+    // Operators simulate with leader's contexts to ensure deterministic consensus
+    // If contexts provided, operators reuse leader's WASM results and block numbers
+    // If not provided, operators execute fresh (fallback for backward compatibility)
     const simulationResult = await sdk.simulateWorkflow(
       workflowData,
       ipfsHash,
       isProd,
       ipfsServiceUrl,
       accessToken || undefined,
+      dataRefContext,
+      wasmRefContext,
     );
 
     try {
@@ -255,19 +357,15 @@ router.post('/task/validate', async (req: Request, res: Response) => {
       return res.status(200).json({ data: false, error: false, message: 'No simulation results for targetChainId' });
     }
 
-    // Parse the tuple data from the request
-    const packedUserOp = parseTupleData(data);
-    if (!packedUserOp) {
-      logger.warn(`[ValidateAPI] Failed to parse tuple data for ipfsHash=${ipfsHash}`);
-      return res.status(200).json({ data: false, error: true, message: 'Failed to parse tuple data' });
-    }
+    // Use already-parsed data from earlier (parsedData contains packedUserOp and contexts)
+    const packedUserOp = parsedData.packedUserOp;
 
     // Compare the parsed PackedUserOperation with simulation results
     approved = chainResults.some(
       result => {
         const simulationCallData = (result as any)?.userOp?.callData?.toString();
         const simulationNonce = (result as any)?.userOp?.nonce?.toString();
-        
+
         const callDataMatch = simulationCallData === packedUserOp.callData;
         const nonceMatch = simulationNonce === packedUserOp.nonce.toString();
         
@@ -291,6 +389,58 @@ router.post('/task/validate', async (req: Request, res: Response) => {
         return matches;
       }
     );
+
+    // WASM validation (if enabled)
+    if (wasmClient && approved) {
+      try {
+        // Extract WASM code from request if provided, or use default validation logic
+        const wasmB64 = (req.body as any).wasmB64;
+        const wasmHash = (req.body as any).wasmHash;
+        
+        if (wasmB64) {
+          logger.info(`[ValidateAPI] Running WASM validation for ipfsHash=${ipfsHash}`);
+          
+          const wasmInput = {
+            proofOfTask,
+            packedUserOp: {
+              sender: packedUserOp.sender,
+              nonce: packedUserOp.nonce.toString(),
+              callData: packedUserOp.callData,
+              signature: packedUserOp.signature,
+            },
+            simulationResult: chainResults[0],
+            targetChainId: targetChainIdNum,
+          };
+
+          const wasmResult = await wasmClient.run({
+            jobId: `validate-${ipfsHash}-${Date.now()}`,
+            wasmHash,
+            wasmB64,
+            input: wasmInput,
+            timeoutMs: 2000, // 2 second timeout for validation
+          });
+
+          if (!wasmResult.ok) {
+            logger.warn(`[ValidateAPI] WASM validation failed: ${wasmResult.error}`);
+            approved = false;
+          } else if (wasmResult.result && typeof wasmResult.result === 'object') {
+            // WASM should return { approved: boolean, reason?: string }
+            const wasmApproved = (wasmResult.result as any).approved === true;
+            if (!wasmApproved) {
+              logger.info(`[ValidateAPI] WASM validation rejected: ${(wasmResult.result as any).reason || 'no reason provided'}`);
+              approved = false;
+            } else {
+              logger.info(`[ValidateAPI] WASM validation approved`);
+            }
+          }
+        } else {
+          logger.debug(`[ValidateAPI] WASM validation skipped (no wasmB64 in request)`);
+        }
+      } catch (error) {
+        logger.error({ error }, `[ValidateAPI] WASM validation error - rejecting for safety`);
+        approved = false;
+      }
+    }
 
     logger.info(`[ValidateAPI] Validation ${approved ? 'APPROVED' : 'REJECTED'} for ipfsHash=${ipfsHash} targetChainId=${targetChainIdNum}`);
     return res.status(200).json({ data: approved, error: false, message: null });
