@@ -96,6 +96,7 @@ async function main() {
               stepPct: 1,        // 1% grid step
               maxPoolShare: 0.2, // Max 20% of pool TVL
               minAllocation: 1000, // Min $1000 allocation
+              maxVaultAllocationShare: 0.4, // Max 40% of vault to any single protocol
             },
           },
           wasmTimeoutMs: 30000, // 30 seconds timeout
