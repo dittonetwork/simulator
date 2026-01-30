@@ -53,11 +53,14 @@ pub struct OptimizerConfig {
     pub max_pool_share: f64,
     #[serde(default = "default_min_allocation")]
     pub min_allocation: f64,
+    #[serde(default = "default_max_vault_allocation_share")]
+    pub max_vault_allocation_share: f64,
 }
 
 fn default_step_pct() -> usize { 1 }
 fn default_max_pool_share() -> f64 { 0.2 }
 fn default_min_allocation() -> f64 { 1000.0 }
+fn default_max_vault_allocation_share() -> f64 { 0.4 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -696,6 +699,8 @@ fn is_valid_allocation(
     blocked_mask: u8,
     max_pool_share: f64,
     min_allocation: f64,
+    max_vault_allocation_share: f64,
+    total_assets: f64,
 ) -> bool {
     for (i, &alloc) in allocations.iter().enumerate() {
         let protocol = &protocols[i];
@@ -712,6 +717,11 @@ fn is_valid_allocation(
         }
 
         if alloc > 0.0 && alloc < min_allocation {
+            return false;
+        }
+
+        // Max vault allocation share constraint: no single protocol can have more than X% of vault
+        if total_assets > 0.0 && alloc > total_assets * max_vault_allocation_share {
             return false;
         }
     }
@@ -742,8 +752,14 @@ fn optimize(
             .map(|p| p.pool_supply * config.max_pool_share / (1.0 - config.max_pool_share))
             .collect();
 
+        // Calculate vault allocation cap in percentage (e.g., 0.4 -> 40%)
+        let vault_cap_pct = (config.max_vault_allocation_share * 100.0) as usize;
+
         let mut max_weights_pct: Vec<usize> = max_allocs.iter()
-            .map(|ma| ((ma / total_assets * 100.0) as usize + 1).min(100))
+            .map(|ma| {
+                let pool_cap = ((ma / total_assets * 100.0) as usize + 1).min(100);
+                pool_cap.min(vault_cap_pct) // Apply the stricter of pool cap and vault cap
+            })
             .collect();
 
         let current_balances: Vec<f64> = protocols.iter().map(|p| p.our_balance).collect();
@@ -753,7 +769,7 @@ fn optimize(
             }
         }
 
-        log_info!("Using bounded grid with max weights: {:?}", max_weights_pct);
+        log_info!("Using bounded grid with max weights: {:?} (vault cap: {}%)", max_weights_pct, vault_cap_pct);
         let w = generate_bounded_weight_grid(n_protocols, config.step_pct, &max_weights_pct);
         log_info!("Generated {} bounded combinations", w.len());
         w
@@ -778,7 +794,7 @@ fn optimize(
     for weight_combo in weights.iter() {
         let allocations: Vec<f64> = weight_combo.iter().map(|&w| w * total_assets).collect();
 
-        if !is_valid_allocation(&allocations, protocols, blocked_mask, config.max_pool_share, config.min_allocation) {
+        if !is_valid_allocation(&allocations, protocols, blocked_mask, config.max_pool_share, config.min_allocation, config.max_vault_allocation_share, total_assets) {
             continue;
         }
 
@@ -993,9 +1009,10 @@ pub fn run_with_rpc(input: Value) {
             step_pct: cfg.get("stepPct").and_then(|v| v.as_u64()).unwrap_or(1) as usize,
             max_pool_share: cfg.get("maxPoolShare").and_then(|v| v.as_f64()).unwrap_or(0.2),
             min_allocation: cfg.get("minAllocation").and_then(|v| v.as_f64()).unwrap_or(1000.0),
+            max_vault_allocation_share: cfg.get("maxVaultAllocationShare").and_then(|v| v.as_f64()).unwrap_or(0.4),
         }
     } else {
-        OptimizerConfig { step_pct: 1, max_pool_share: 0.2, min_allocation: 1000.0 }
+        OptimizerConfig { step_pct: 1, max_pool_share: 0.2, min_allocation: 1000.0, max_vault_allocation_share: 0.4 }
     };
 
     match optimize(optimizer_input.total_assets, &optimizer_input.protocols, optimizer_input.blocked_mask, &config, Some(&irm_params)) {
@@ -1033,7 +1050,7 @@ pub fn run_legacy(input: Value) {
     };
 
     let config = optimizer_input.config.unwrap_or(OptimizerConfig {
-        step_pct: 1, max_pool_share: 0.2, min_allocation: 1000.0,
+        step_pct: 1, max_pool_share: 0.2, min_allocation: 1000.0, max_vault_allocation_share: 0.4,
     });
 
     match optimize(optimizer_input.total_assets, &optimizer_input.protocols, optimizer_input.blocked_mask, &config, None) {
@@ -1055,5 +1072,166 @@ pub fn run_legacy(input: Value) {
             }));
         }
         Err(e) => output_error(&format!("Optimization failed: {}", e)),
+    }
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_protocol(our_balance: f64, pool_supply: f64) -> ProtocolState {
+        ProtocolState {
+            our_balance,
+            pool_supply,
+            pool_borrow: pool_supply * 0.8,
+            utilization: 0.8,
+            current_apy: 0.05,
+            is_blocked: false,
+            protocol_type: 1,
+        }
+    }
+
+    #[test]
+    fn test_max_vault_allocation_share_constraint() {
+        // Scenario: 5 protocols, total assets = 10M, each protocol has 1B pool supply
+        let protocols: Vec<ProtocolState> = (0..5)
+            .map(|_| make_protocol(2_000_000.0, 1_000_000_000.0))
+            .collect();
+
+        let total_assets = 10_000_000.0;
+        let blocked_mask = 0u8;
+        let max_pool_share = 0.2;      // 20% of pool TVL
+        let min_allocation = 1000.0;
+        let max_vault_allocation_share = 0.4;  // 40% of vault
+
+        // Test 1: 40% allocation should PASS (exactly at limit)
+        let allocs_at_limit = vec![4_000_000.0, 2_000_000.0, 2_000_000.0, 1_000_000.0, 1_000_000.0];
+        assert!(is_valid_allocation(
+            &allocs_at_limit, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_allocation_share, total_assets
+        ), "40% allocation should be valid");
+
+        // Test 2: 41% allocation should FAIL (exceeds 40% limit)
+        let allocs_over_limit = vec![4_100_000.0, 2_000_000.0, 1_900_000.0, 1_000_000.0, 1_000_000.0];
+        assert!(!is_valid_allocation(
+            &allocs_over_limit, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_allocation_share, total_assets
+        ), "41% allocation should be invalid");
+
+        // Test 3: Multiple protocols at 40% should be valid (individual check)
+        let allocs_multiple_at_limit = vec![4_000_000.0, 4_000_000.0, 1_000_000.0, 500_000.0, 500_000.0];
+        assert!(is_valid_allocation(
+            &allocs_multiple_at_limit, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_allocation_share, total_assets
+        ), "Two protocols at 40% should be valid");
+
+        // Test 4: 50% allocation should FAIL
+        let allocs_half = vec![5_000_000.0, 2_000_000.0, 1_500_000.0, 1_000_000.0, 500_000.0];
+        assert!(!is_valid_allocation(
+            &allocs_half, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_allocation_share, total_assets
+        ), "50% allocation should be invalid");
+    }
+
+    #[test]
+    fn test_max_vault_allocation_share_with_different_limits() {
+        let protocols: Vec<ProtocolState> = (0..3)
+            .map(|_| make_protocol(1_000_000.0, 500_000_000.0))
+            .collect();
+
+        let total_assets = 3_000_000.0;
+        let blocked_mask = 0u8;
+        let max_pool_share = 0.2;
+        let min_allocation = 1000.0;
+
+        // Test with 30% vault limit (30% of 3M = 900K max per protocol)
+        let max_vault_30 = 0.3;
+        // All protocols at exactly 30% (900K each)
+        let allocs_valid_30 = vec![900_000.0, 900_000.0, 900_000.0];
+        assert!(is_valid_allocation(
+            &allocs_valid_30, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_30, total_assets
+        ), "All allocations at 30% should be valid with 30% limit");
+
+        // Test allocation exceeding 30% (1M = 33.3% > 30%)
+        let allocs_over_30 = vec![1_000_000.0, 1_000_000.0, 1_000_000.0];
+        assert!(!is_valid_allocation(
+            &allocs_over_30, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_30, total_assets
+        ), "33% allocation should be invalid with 30% limit");
+
+        // Test with 100% vault limit (disabled)
+        let max_vault_100 = 1.0;
+        let allocs_all_in_one = vec![3_000_000.0, 0.0, 0.0];
+        assert!(is_valid_allocation(
+            &allocs_all_in_one, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_100, total_assets
+        ), "100% in one protocol should be valid with 100% limit");
+    }
+
+    #[test]
+    fn test_pool_share_constraint_still_works() {
+        // Small pool: 10M supply, vault has 10M assets
+        // With 20% max pool share, can only allocate ~2.5M (20% of 12.5M new total)
+        let protocols = vec![make_protocol(0.0, 10_000_000.0)];
+
+        let total_assets = 10_000_000.0;
+        let blocked_mask = 0u8;
+        let max_pool_share = 0.2;
+        let min_allocation = 1000.0;
+        let max_vault_allocation_share = 1.0; // Disabled for this test
+
+        // Allocating 3M should fail (would be 3M / 13M = 23% of new pool)
+        let allocs_too_much = vec![3_000_000.0];
+        assert!(!is_valid_allocation(
+            &allocs_too_much, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_allocation_share, total_assets
+        ), "Exceeding pool share should fail");
+
+        // Allocating 2M should pass (2M / 12M = 16.7% of new pool)
+        let allocs_ok = vec![2_000_000.0];
+        assert!(is_valid_allocation(
+            &allocs_ok, &protocols, blocked_mask,
+            max_pool_share, min_allocation, max_vault_allocation_share, total_assets
+        ), "Within pool share should pass");
+    }
+
+    #[test]
+    fn test_optimizer_respects_vault_allocation_limit() {
+        // 5 protocols with large pools (pool share won't be limiting)
+        let protocols: Vec<ProtocolState> = (0..5)
+            .map(|i| {
+                let mut p = make_protocol(2_000_000.0, 10_000_000_000.0); // 10B pool
+                p.current_apy = 0.04 + (i as f64) * 0.01; // Higher APY for later protocols
+                p
+            })
+            .collect();
+
+        let total_assets = 10_000_000.0;
+        let blocked_mask = 0u8;
+
+        let config = OptimizerConfig {
+            step_pct: 5, // 5% steps for faster test
+            max_pool_share: 0.2,
+            min_allocation: 100_000.0,
+            max_vault_allocation_share: 0.4,
+        };
+
+        let result = optimize(total_assets, &protocols, blocked_mask, &config, None)
+            .expect("Optimization should succeed");
+
+        // Check no allocation exceeds 40%
+        for (i, alloc) in result.allocations_decimal.iter().enumerate() {
+            let share = alloc / total_assets;
+            assert!(
+                share <= 0.40 + 0.001, // Small tolerance for floating point
+                "Protocol {} has {}% allocation, exceeds 40% limit",
+                i, share * 100.0
+            );
+        }
     }
 }

@@ -51,6 +51,7 @@
   "config": {
     "stepPct": 1,
     "maxPoolShare": 0.2,
-    "minAllocation": 1000
+    "minAllocation": 1000,
+    "maxVaultAllocationShare": 0.4
   }
 }
