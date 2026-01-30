@@ -38,10 +38,21 @@ jobs:
           version="${{ inputs.version }}"
           ref_name="${{ github.ref_name }}"
           ecr_registry="${{ env.ECR_REGISTRY }}"
-          if aws ecr describe-images --repository-name "epsilon/${{ env.SERVICE_NAME }}" --image-ids imageTag="${ref_name}_${version}" > /dev/null 2>&1; then
-            echo "Image $image_tag exists."
+          image_tag="${ref_name}_${version}"
+          
+          # Validate simulator image
+          if aws ecr describe-images --repository-name "epsilon/${{ env.SERVICE_NAME }}" --image-ids imageTag="${image_tag}" > /dev/null 2>&1; then
+            echo "Simulator image ${image_tag} exists."
           else
-            echo "Image $image_tag not found. Stopping deployment."
+            echo "Simulator image ${image_tag} not found. Stopping deployment."
+            exit 1
+          fi
+          
+          # Validate WASM sandbox image
+          if aws ecr describe-images --repository-name "epsilon/${{ env.SERVICE_NAME }}-wasmtime" --image-ids imageTag="${image_tag}" > /dev/null 2>&1; then
+            echo "WASM sandbox image ${image_tag} exists."
+          else
+            echo "WASM sandbox image ${image_tag} not found. Stopping deployment."
             exit 1
           fi
 
@@ -100,10 +111,12 @@ jobs:
 
       run: |
           version="${{ inputs.version }}"
-          version="${{ inputs.version }}"
           ref_name="${{ github.ref_name }}"
           environment=${{ inputs.environment }}
+          image_tag="${ref_name}_${version}"
           helm upgrade --install -n epsilon \
             -f .devops/helm/values-$environment.yaml \
-            --set image.tag="${ref_name}_${version}" ${{ env.SERVICE_NAME }} \
+            --set image.tag="${image_tag}" \
+            --set wasmSandbox.image.tag="${image_tag}" \
+            ${{ env.SERVICE_NAME }} \
             .devops/helm/

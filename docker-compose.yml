@@ -9,33 +9,68 @@ services:
       - RUNNER_NODE_SLEEP=${RUNNER_NODE_SLEEP}
       - MAX_WORKERS=${MAX_WORKERS}
       - FULL_NODE=${FULL_NODE}
-      - API_ONLY=${API_ONLY}
-    env_file:
-      - .env
+      - API_ONLY=${API_ONLY:-true}
+      # RPC URLs for EVM chains (required for WASM RPC calls)
+      # Override these with your own RPC endpoints if needed
+      - RPC_URL_1=${RPC_URL_1:-https://eth.llamarpc.com}
+      - RPC_URL_11155111=${RPC_URL_11155111:-https://rpc.sepolia.org}
+    # env_file:
+    #   - .env
     ports:
       - "8080:8080"
     command: ["npm", "run", "start"] 
 
-  othnode:
+  # othnode:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.othnode
+  #   env_file:
+  #     - .env
+  #   command: [
+  #     "run",
+  #     "attester",
+  #     "/dns4/aggregator.develop.dittonetwork.io/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+  #     "--avs-webapi",
+  #     "simulator",
+  #     "--avs-webapi-port",
+  #     "8080",
+  #   ]
+  #   environment:
+  #     - PRIVATE_KEY=${PRIVATE_KEY}
+  #     - L1_CHAIN=${L1_CHAIN}
+  #     - L2_CHAIN=${L2_CHAIN}
+  #     - L1_RPC=${L1_RPC}
+  #   depends_on:
+  #     simulator:
+  #       condition: service_started
+
+  sandbox:
     build:
       context: .
-      dockerfile: Dockerfile.othnode
-    env_file:
-      - .env
-    command: [
-      "run",
-      "attester",
-      "/dns4/aggregator.develop.dittonetwork.io/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
-      "--avs-webapi",
-      "simulator",
-      "--avs-webapi-port",
-      "8080",
-    ]
+      dockerfile: Dockerfile.wasmtime
+    ports:
+      - "8081:8081"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
     environment:
-      - PRIVATE_KEY=${PRIVATE_KEY}
-      - L1_CHAIN=${L1_CHAIN}
-      - L2_CHAIN=${L2_CHAIN}
-      - L1_RPC=${L1_RPC}
-    depends_on:
-      simulator:
-        condition: service_started
+      # HTTP server configuration
+      - PORT=8081
+      - HTTP_PORT=8081
+      # API_ONLY mode - only expose WASM endpoints, no simulator loop
+      - API_ONLY=true
+      # WASM cache directory (uses tmpfs)
+      - WASM_CACHE_DIR=/tmp/wasm-cache
+      # IPFS service URL (required for config, but not used in sandbox mode)
+      - IPFS_SERVICE_URL=https://ipfs.io
+      # RPC URLs for EVM chains (required for WASM RPC calls)
+      # Defaults to public RPC endpoints if not set in .env or environment
+      - RPC_URL_1=${RPC_URL_1:-https://eth.llamarpc.com}
+      - RPC_URL_11155111=${RPC_URL_11155111:-https://rpc.sepolia.org}

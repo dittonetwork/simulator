@@ -6,13 +6,18 @@ import {
   type SerializedWorkflowData,
   type DataRefContext,
   serializeDataRefContext,
+  type WasmRefContext,
+  serializeWasmRefContext,
 } from '@ditto/workflow-sdk';
+import { createWasmClient } from '../utils/wasmClient.js';
+import { Database } from '../db.js';
 import { Wallet, JsonRpcProvider } from 'ethers';
 import { getLogger } from '../logger.js';
 import { deserialize } from '@ditto/workflow-sdk';
 import { privateKeyToAccount } from 'viem/accounts';
 import { addressToEmptyAccount } from '@zerodev/sdk';
 import { Signer } from "@zerodev/sdk/types";
+import { getConfig } from '../config.js';
 
 const logger = getLogger('WorkflowSDK');
 
@@ -44,6 +49,13 @@ export interface SimulationResult {
   dataRefContext?: DataRefContext;
   /** Serialized dataRefContext for easy transmission */
   dataRefContextSerialized?: string;
+  /** 
+   * WASM ref context for deterministic consensus.
+   * Contains WASM execution results - operators must use same results.
+   */
+  wasmRefContext?: WasmRefContext;
+  /** Serialized wasmRefContext for easy transmission */
+  wasmRefContextSerialized?: string;
 }
 
 export interface ExecutionResult {
@@ -77,11 +89,13 @@ export class WorkflowSDKIntegration {
 
   private workflowContract: WorkflowContract;
 
-  constructor(config: WorkflowSDKConfig) {
+  private database: Database | null;
+
+  constructor(config: WorkflowSDKConfig, database?: Database) {
     this.config = config;
     this.storage = new IpfsStorage(config.ipfsServiceUrl);
-
     this.workflowContract = new WorkflowContract(config.workflowContractAddress as `0x${string}`);
+    this.database = database || null;
   }
 
   /**
@@ -107,6 +121,9 @@ export class WorkflowSDKIntegration {
    * 
    * Returns dataRefContext with block numbers for deterministic consensus.
    * Pass this context to operators so they can reproduce the same read-calls.
+   * 
+   * @param dataRefContext - Optional context from leader (operator mode) - uses same block numbers
+   * @param wasmRefContext - Optional WASM context from leader (operator mode) - reuses WASM results
    */
   async simulateWorkflow(
     _workflowData: Workflow,
@@ -114,6 +131,8 @@ export class WorkflowSDKIntegration {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    dataRefContext?: DataRefContext,
+    wasmRefContext?: WasmRefContext,
   ): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
@@ -127,6 +146,55 @@ export class WorkflowSDKIntegration {
         throw new Error('Executor address or private key is not defined in environment variables');
       }
 
+      // Load workflow to get owner address for whitelist check
+      const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
+      
+      // Check if owner is whitelisted for WASM execution
+      const config = getConfig();
+      let wasmClient: any = undefined;
+      let db: Database | undefined;
+      
+      if (this.database) {
+        await this.database.connect();
+        db = this.database;
+        
+        // If wasmRefContext is provided (operator mode), we use leader's results
+        // Do NOT create wasmClient - we won't execute WASM, only resolve references from context
+        const isOperatorMode = !!wasmRefContext;
+        
+        if (isOperatorMode) {
+          // Operator mode: use provided WASM context from leader, do NOT execute WASM
+          // wasmClient is NOT needed - resolver will use provided context for reference resolution
+          logger.info('Operator mode: Using provided WASM context from leader, will NOT execute WASM');
+          // Do NOT create wasmClient - we're not executing WASM
+          wasmClient = undefined;
+        } else {
+          // Leader mode: check whitelist before executing WASM
+          // Get owner address from workflow
+          const ownerAddress = (workflowData.owner as any)?.address || workflowData.owner;
+          const ownerStr = typeof ownerAddress === 'string' ? ownerAddress : String(ownerAddress);
+          
+          // Check whitelist if enabled
+          if (config.wasmWhitelistEnabled) {
+            const isWhitelisted = await this.database.isWasmWhitelisted(
+              ownerStr,
+              config.wasmWhitelistAddresses
+            );
+            
+            if (isWhitelisted) {
+              logger.info(`Owner ${ownerStr} is whitelisted for WASM execution`);
+              wasmClient = createWasmClient();
+            } else {
+              logger.warn(`Owner ${ownerStr} is NOT whitelisted - WASM steps will be skipped`);
+            }
+          } else {
+            // Whitelist disabled - allow WASM for all
+            wasmClient = createWasmClient();
+          }
+        }
+      }
+      
+      // Use provided contexts if available (operator mode), otherwise create new (leader mode)
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
@@ -136,6 +204,10 @@ export class WorkflowSDKIntegration {
         true,
         false,
         accessToken,
+        dataRefContext, // Use provided context (operator) or create new (leader)
+        wasmClient,
+        db,
+        wasmRefContext, // Use provided WASM context (operator) or create new (leader)
       );
 
       logger.info(`Simulation completed successfully`);
@@ -165,17 +237,23 @@ export class WorkflowSDKIntegration {
         }
       });
 
-      // Build simulation result with dataRefContext
+      // Build simulation result with dataRefContext and wasmRefContext
       const simResult: SimulationResult = {
         success: result.success,
         results: result.results as any,
         markRunHash: result.markRunHash,
         dataRefContext: result.dataRefContext,
+        wasmRefContext: result.wasmRefContext,
       };
       
-      // Add serialized context for easy transmission to operators
+      // Add serialized contexts for easy transmission to operators
       if (result.dataRefContext && result.dataRefContext.resolvedRefs.length > 0) {
         simResult.dataRefContextSerialized = serializeDataRefContext(result.dataRefContext);
+      }
+      
+      if (result.wasmRefContext && result.wasmRefContext.resolvedRefs.length > 0) {
+        simResult.wasmRefContextSerialized = serializeWasmRefContext(result.wasmRefContext);
+        logger.info(`- WASM ref context: ${result.wasmRefContext.resolvedRefs.length} resolved refs`);
       }
 
       return simResult;
@@ -187,6 +265,7 @@ export class WorkflowSDKIntegration {
 
   /**
    * Execute workflow using stored workflow data
+   * @param wasmRefContext - Optional WASM context from simulation to avoid re-executing WASM steps
    */
   async executeWorkflow(
     _workflowData: Workflow,
@@ -194,10 +273,50 @@ export class WorkflowSDKIntegration {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    wasmRefContext?: WasmRefContext,
   ): Promise<ExecutionResult> {
     logger.info(`Executing workflow for ${ipfsHash}`);
     try {
       const executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
+      
+      // Load workflow to get owner address for whitelist check
+      const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
+      
+      // Check if owner is whitelisted for WASM execution
+      const config = getConfig();
+      let wasmClient: any = undefined;
+      let db: Database | undefined;
+      
+      if (this.database) {
+        await this.database.connect();
+        db = this.database;
+        
+        // Get owner address from workflow
+        const ownerAddress = (workflowData.owner as any)?.address || workflowData.owner;
+        const ownerStr = typeof ownerAddress === 'string' ? ownerAddress : String(ownerAddress);
+        
+        // Check whitelist if enabled
+        if (config.wasmWhitelistEnabled) {
+          const isWhitelisted = await this.database.isWasmWhitelisted(
+            ownerStr,
+            config.wasmWhitelistAddresses
+          );
+          
+          if (isWhitelisted) {
+            logger.info(`Owner ${ownerStr} is whitelisted for WASM execution`);
+            wasmClient = createWasmClient();
+          } else {
+            logger.warn(`Owner ${ownerStr} is NOT whitelisted - WASM steps will be skipped`);
+          }
+        } else {
+          // Whitelist disabled - allow WASM for all
+          wasmClient = createWasmClient();
+        }
+      }
+      
+      // Reuse WASM context from simulation to avoid re-executing WASM steps
+      // This ensures WASM is only executed once (during simulation) and reused in execution
+      // In Othentic flow, operators will receive wasmRefContext from leader's simulation
       const result = await executeFromIpfs(
         ipfsHash,
         this.storage,
@@ -207,6 +326,10 @@ export class WorkflowSDKIntegration {
         false,
         false,
         accessToken,
+        undefined, // dataRefContext - could be passed from simulation if needed
+        wasmClient,
+        db,
+        wasmRefContext, // Reuse WASM context from simulation - operators will get it from leader
       );
 
       logger.info(`Execution completed successfully`);
@@ -307,7 +430,7 @@ export function getDefaultConfig(): WorkflowSDKConfig {
 export class WorkflowSDKService {
   private integration: WorkflowSDKIntegration;
 
-  constructor(config: Partial<WorkflowSDKConfig> = {}) {
+  constructor(config: Partial<WorkflowSDKConfig> = {}, database?: Database) {
     const mergedConfig: WorkflowSDKConfig = {
       executorPrivateKey: config.executorPrivateKey || process.env.EXECUTOR_PRIVATE_KEY || '',
       executorAddress: config.executorAddress || process.env.EXECUTOR_ADDRESS || '',
@@ -317,7 +440,7 @@ export class WorkflowSDKService {
       chainId: config.chainId || parseInt(process.env.CHAIN_ID || '11155111', 10),
     } as WorkflowSDKConfig;
 
-    this.integration = new WorkflowSDKIntegration(mergedConfig);
+    this.integration = new WorkflowSDKIntegration(mergedConfig, database);
   }
 
   loadWorkflowData(ipfsHash: string) {
@@ -330,8 +453,10 @@ export class WorkflowSDKService {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    dataRefContext?: DataRefContext,
+    wasmRefContext?: WasmRefContext,
   ) {
-    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken);
+    return this.integration.simulateWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken, dataRefContext, wasmRefContext);
   }
 
   executeWorkflow(
@@ -340,8 +465,9 @@ export class WorkflowSDKService {
     prodContract: boolean,
     ipfsServiceUrl: string,
     accessToken?: string,
+    wasmRefContext?: WasmRefContext,
   ) {
-    return this.integration.executeWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken);
+    return this.integration.executeWorkflow(data, ipfsHash, prodContract, ipfsServiceUrl, accessToken, wasmRefContext);
   }
 
   processWorkflow(ipfsHash: string, prodContract: boolean, ipfsServiceUrl: string) {
@@ -349,15 +475,15 @@ export class WorkflowSDKService {
   }
 }
 
-export function createWorkflowSDKService(config?: Partial<WorkflowSDKConfig>) {
-  return new WorkflowSDKService(config);
+export function createWorkflowSDKService(config?: Partial<WorkflowSDKConfig>, database?: Database) {
+  return new WorkflowSDKService(config, database);
 }
 
 let _globalInstance: WorkflowSDKService | null = null;
 
-export function getWorkflowSDKService(config?: Partial<WorkflowSDKConfig>) {
-  if (!_globalInstance || config) {
-    _globalInstance = createWorkflowSDKService(config);
+export function getWorkflowSDKService(config?: Partial<WorkflowSDKConfig>, database?: Database) {
+  if (!_globalInstance || config || database) {
+    _globalInstance = createWorkflowSDKService(config, database);
   }
   return _globalInstance;
 }

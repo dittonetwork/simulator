@@ -11,9 +11,16 @@ import type { Workflow } from './types/workflow.js';
 import { reportingClient } from './reportingClient.js';
 import { getConfig } from './config.js';
 import validateRouter from './validateApi.js';
+import { wasmHealthHandler, wasmRunHandler } from './server.js';
 
 dotenv.config();
 const logger = getLogger('Simulator');
+
+// Check if running in sandbox mode (WASM-only mode)
+// Sandbox mode skips all simulator initialization (DB, EventMonitor, etc.)
+// Note: Modules are still imported (they call getConfig() at import time),
+// but IPFS_SERVICE_URL is set in docker-compose.yml to prevent errors
+const isSandboxMode = process.env.API_ONLY === 'true' && !process.env.MONGO_URI;
 
 class Simulator {
   private sleep!: number;
@@ -344,21 +351,104 @@ class Simulator {
 }
 
 // Entry point
-const simulator = new Simulator();
-const app = express();
-app.use(bodyParser.json());
-app.use(validateRouter);
+let simulator: Simulator | null = null;
+if (!isSandboxMode) {
+  simulator = new Simulator();
+}
 
-const { apiOnly, httpPort } = getConfig();
+const app = express();
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  logger.info({ method: req.method, url: req.url, ip: req.ip }, 'Incoming request');
+  next();
+});
+
+// Configure body parser with larger limit for WASM payloads (12MB to match server.ts MAX_BODY_BYTES)
+const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? String(12 * 1024 * 1024)); // 12MB
+app.use(bodyParser.json({ limit: MAX_BODY_BYTES }));
+
+// Only use validateRouter if not in sandbox mode (it requires DB)
+if (!isSandboxMode) {
+  app.use(validateRouter);
+}
+
+// Get config - for sandbox mode, provide minimal config
+let apiOnly: boolean;
+let httpPort: number;
+let wasmServerUrl: string | undefined;
+
+if (isSandboxMode) {
+  // Sandbox mode: minimal config without DB dependencies
+  apiOnly = true;
+  httpPort = parseInt(process.env.HTTP_PORT || '8080', 10);
+  wasmServerUrl = process.env.WASM_SERVER_URL || undefined;
+} else {
+  const config = getConfig();
+  apiOnly = config.apiOnly;
+  httpPort = config.httpPort;
+  wasmServerUrl = config.wasmServerUrl;
+}
+
+// Integrate WASM server endpoints if not using external WASM server
+// This allows operators to use the same server for both validation API and WASM execution
+if (!wasmServerUrl) {
+  app.get('/wasm/health', wasmHealthHandler);
+  app.post('/wasm/run', wasmRunHandler);
+  if (isSandboxMode) {
+    logger.info('WASM sandbox server started');
+    logger.info('  - GET /wasm/health - Health check');
+    logger.info('  - POST /wasm/run - Execute WASM code');
+  } else {
+    logger.info('WASM server endpoints integrated into main Express app at /wasm/*');
+    logger.info('  - GET /wasm/health - Health check');
+    logger.info('  - POST /wasm/run - Execute WASM code');
+  }
+} else {
+  logger.info(`Using external WASM server: ${wasmServerUrl}`);
+}
+
+// RPC proxy endpoint for WASM sandbox (only on simulator, not sandbox itself)
+if (!isSandboxMode) {
+  const { getRpcSimulator } = await import('./utils/rpcSimulator.js');
+  
+  app.post('/rpc/proxy', async (req, res) => {
+    logger.info({ method: req.method, url: req.url, bodyKeys: Object.keys(req.body || {}) }, 'RPC proxy request received');
+    try {
+      const simulator = getRpcSimulator();
+      const response = await simulator.execute(req.body);
+      logger.info({ method: req.body?.method, hasError: !!response.error }, 'RPC proxy response');
+      res.json(response);
+    } catch (error) {
+      logger.error({ error }, 'RPC proxy error');
+      res.status(500).json({
+        jsonrpc: '2.0',
+        id: req.body?.id ?? null,
+        error: { code: -32000, message: 'RPC proxy error', data: (error as Error).message }
+      });
+    }
+  });
+  logger.info('RPC proxy endpoint available at POST /rpc/proxy');
+}
+
+// Catch-all 404 handler (after all routes)
+app.use((req, res) => {
+  logger.warn({ method: req.method, url: req.url }, '404 - Route not found');
+  res.status(404).json({ error: 'Not found', path: req.url });
+});
 
 let isShuttingDown = false;
 async function gracefulShutdown(signal: NodeJS.Signals) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  logger.info({ signal }, 'Received shutdown signal. Unregistering operator...');
-  try {
-    await reportingClient.unregisterOperator();
-  } catch {}
+  if (isSandboxMode) {
+    logger.info({ signal }, 'Received shutdown signal. Shutting down sandbox...');
+  } else {
+    logger.info({ signal }, 'Received shutdown signal. Unregistering operator...');
+    try {
+      await reportingClient.unregisterOperator();
+    } catch {}
+  }
   // Exit after unregister attempt
   process.exit(0);
 }
@@ -367,11 +457,17 @@ process.on('SIGINT', gracefulShutdown);
 process.on('SIGTERM', gracefulShutdown);
 
 app.listen(httpPort, () => {
-  logger.info(`HTTP server listening on port ${httpPort}`);
+  if (isSandboxMode) {
+    logger.info(`WASM sandbox server listening on port ${httpPort}`);
+  } else {
+    logger.info(`HTTP server listening on port ${httpPort}`);
+  }
 });
 
-if (!apiOnly) {
-  simulator.run();
+if (!isSandboxMode && !apiOnly) {
+  simulator!.run();
+} else if (isSandboxMode) {
+  logger.info('Sandbox mode: Only WASM endpoints are available.');
 } else {
   logger.info('API_ONLY mode enabled. Simulator loop is not running.');
 }
