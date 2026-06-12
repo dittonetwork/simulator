@@ -136,21 +136,31 @@ export class WorkflowSDKIntegration {
   ): Promise<SimulationResult> {
     logger.info(`Simulating workflow execution for ${ipfsHash}`);
     try {
+      const config = getConfig();
+
+      // Attesters (API_ONLY=true) simulate as the performer's address (EXECUTOR_ADDRESS)
+      // to reproduce the performer's userOp - they must NOT sign with their own key
+      // even if EXECUTOR_PRIVATE_KEY is present in the environment.
+      // Performers (API_ONLY=false) need the real private key so the simulated userOp
+      // carries a valid signature - an empty account produces a dummy signature
+      // that fails on-chain with AA24.
       let executor: Signer;
-      if (this.config.executorAddress != "") {
+      if (config.apiOnly && this.config.executorAddress != "") {
         logger.info(`Using executor address: ${this.config.executorAddress}`);
         executor = addressToEmptyAccount(this.config.executorAddress as `0x${string}`);
       } else if (this.config.executorPrivateKey != "") {
         executor = privateKeyToAccount(this.config.executorPrivateKey as `0x${string}`);
+      } else if (this.config.executorAddress != "") {
+        logger.info(`Using executor address: ${this.config.executorAddress}`);
+        executor = addressToEmptyAccount(this.config.executorAddress as `0x${string}`);
       } else {
         throw new Error('Executor address or private key is not defined in environment variables');
       }
 
       // Load workflow to get owner address for whitelist check
       const workflowData = await this.loadWorkflowFromIpfs(ipfsHash);
-      
+
       // Check if owner is whitelisted for WASM execution
-      const config = getConfig();
       let wasmClient: any = undefined;
       let db: Database | undefined;
       
