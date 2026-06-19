@@ -31,6 +31,7 @@ import {
   VAULT_DATA_READER_ADDRESS,
   POOL_ADDRESSES,
   PROTOCOL_TYPES,
+  ESTIMATOR_ADDRESSES,
   REBALANCE_INTERVAL,
   MAINNET_CHAIN_ID,
 } from './config';
@@ -91,6 +92,7 @@ async function main() {
             vault: VAULT_ADDRESS,
             protocolTypes: PROTOCOL_TYPES,
             pools: POOL_ADDRESSES,
+            estimators: ESTIMATOR_ADDRESSES, // per-adapter estimators; WASM sources MetaMorpho APY from these
             chainId: MAINNET_CHAIN_ID,
             config: {
               stepPct: 1,        // 1% grid step
