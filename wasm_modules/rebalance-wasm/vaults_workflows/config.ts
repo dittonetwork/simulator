@@ -81,11 +81,23 @@ export const POOL_ADDRESSES = [
   SPARK_POOL_ADDRESS,       // [4] Spark
 ];
 
+// Per-adapter on-chain estimator addresses (same order as POOL_ADDRESSES).
+// The WASM optimizer calls estimateAPYAfterDelta(0) on the MetaMorpho slots ([2],[3])
+// to source the correct base APY (VaultDataReader leaves currentApyWad=0 for MetaMorpho).
+// These MUST be the estimators wired into the vault's ReturnEstimator for the gate to agree.
+export const ESTIMATOR_ADDRESSES = [
+  AAVE_ESTIMATOR_ADDRESS,             // [0] Aave (unused by WASM Morpho path)
+  FLUID_ESTIMATOR_ADDRESS,            // [1] Fluid (unused)
+  MORPHO_GAUNTLET_ESTIMATOR_ADDRESS,  // [2] Morpho Gauntlet
+  MORPHO_STEAKHOUSE_ESTIMATOR_ADDRESS,// [3] Morpho Steakhouse
+  SPARK_ESTIMATOR_ADDRESS,            // [4] Spark (unused)
+];
+
 // ============ Timing Configuration ============
 
-export const GUARD_UPDATE_INTERVAL = '5,35 * * * *'; // Every 30 minutes (at :05 and :35)
+export const GUARD_UPDATE_INTERVAL = '5 0,12 * * *'; // Twice a day (00:05, 12:05 UTC) — requires GuardManager.maxStaleness = 86400
 export const REBALANCE_INTERVAL = '15 */12 * * *'; // Every 12 hours (at :15)
-export const TIMEPOINT_INTERVAL = '0 */2 * * *'; // Every 2 hours (at :00)
+export const TIMEPOINT_INTERVAL = '1 0,12 * * *'; // Twice a day (00:01, 12:01 UTC)
 
 // ============ ABIs ============
 

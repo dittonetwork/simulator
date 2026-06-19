@@ -174,6 +174,46 @@ mod vault_reader {
         decode_vault_snapshot(result_hex)
     }
 
+    /// Call <estimator>.estimateAPYAfterDelta(int256 delta=0) -> uint256 (APY in WAD).
+    /// Used to source the correct base APY for MetaMorpho vaults, whose APY cannot be
+    /// derived from a single VaultDataReader snapshot (metaLastTotalAssets is snapped to
+    /// metaTotalAssets on every interaction, so the share-price-growth window is ~0).
+    pub fn get_estimator_apy_wad(
+        rpc_config: &RpcConfig,
+        estimator: &str,
+        chain_id: u64,
+    ) -> Result<U256, String> {
+        // selector estimateAPYAfterDelta(int256) = 0x5d346794; arg int256(0) = 32 zero bytes
+        let call_data = format!("0x5d346794{}", "0".repeat(64));
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "chainId": chain_id,
+            "params": [{
+                "to": estimator,
+                "data": call_data
+            }, "latest"]
+        });
+
+        let response = rpc_call(rpc_config, &request)?;
+
+        let result_hex = response.get("result")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "No result in estimateAPYAfterDelta response".to_string())?;
+
+        let hex_clean = result_hex.strip_prefix("0x").unwrap_or(result_hex);
+        let bytes = hex::decode(hex_clean)
+            .map_err(|e| format!("Failed to decode estimator APY hex: {}", e))?;
+        let tokens = decode(&[ParamType::Uint(256)], &bytes)
+            .map_err(|e| format!("Failed to decode estimator APY: {}", e))?;
+        match tokens.first() {
+            Some(Token::Uint(u)) => Ok(*u),
+            _ => Err("Invalid estimator APY token".to_string()),
+        }
+    }
+
     fn encode_get_snapshot_call(
         vault: &str,
         protocol_types: &[u8],
@@ -919,13 +959,20 @@ fn transform_snapshot_to_input(snapshot: vault_reader::VaultSnapshot) -> (Optimi
 
     for p in snapshot.protocols.iter() {
         let current_apy = if p.protocol_type == PROTO_MORPHO {
-            calc_dilution_current_apy(
-                p.meta_total_assets.low_u128() as f64,
-                p.meta_total_supply.low_u128() as f64,
-                p.meta_last_total_assets.low_u128() as f64,
-                p.meta_last_update,
-                snapshot.snapshot_timestamp,
-            )
+            // Prefer the on-chain estimator APY (stashed into current_apy_wad by run_with_rpc);
+            // fall back to the share-price dilution model only if it's unavailable (==0).
+            let base = p.current_apy_wad.low_u128() as f64 / WAD;
+            if base > 0.0 {
+                base
+            } else {
+                calc_dilution_current_apy(
+                    p.meta_total_assets.low_u128() as f64,
+                    p.meta_total_supply.low_u128() as f64,
+                    p.meta_last_total_assets.low_u128() as f64,
+                    p.meta_last_update,
+                    snapshot.snapshot_timestamp,
+                )
+            }
         } else {
             p.current_apy_wad.low_u128() as f64 / WAD
         };
@@ -978,6 +1025,12 @@ pub fn run_with_rpc(input: Value) {
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
+    // Per-adapter on-chain estimator addresses (parallel to `pools`), used to source the
+    // correct base APY for MetaMorpho adapters. Optional: empty -> dilution fallback.
+    let estimators: Vec<String> = input.get("estimators")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
     let chain_id = input.get("chainId").and_then(|v| v.as_u64()).unwrap_or(1);
 
     log_info!("Config: vault={}, protocols={}, chainId={}", vault, protocol_types.len(), chain_id);
@@ -991,7 +1044,7 @@ pub fn run_with_rpc(input: Value) {
     };
 
     log_info!("Fetching vault snapshot...");
-    let snapshot = match vault_reader::get_snapshot(&rpc_config, vault_data_reader, vault, &protocol_types, &pools, chain_id) {
+    let mut snapshot = match vault_reader::get_snapshot(&rpc_config, vault_data_reader, vault, &protocol_types, &pools, chain_id) {
         Ok(s) => s,
         Err(e) => {
             output_error(&format!("Failed to fetch snapshot: {}", e));
@@ -1000,6 +1053,32 @@ pub fn run_with_rpc(input: Value) {
     };
 
     log_info!("Snapshot fetched: {} protocols, totalAssets={}", snapshot.protocols.len(), snapshot.total_assets);
+
+    // MetaMorpho APY cannot be derived from a single VaultDataReader snapshot
+    // (currentApyWad=0 by design; metaLastTotalAssets ≈ metaTotalAssets => no growth window),
+    // so for each Morpho adapter source the base APY from its on-chain estimator
+    // (estimateAPYAfterDelta(0)) — the same estimator the vault's gate uses. Falls back to
+    // the dilution model (leaving current_apy_wad untouched) if no estimator or the call fails.
+    for (i, p) in snapshot.protocols.iter_mut().enumerate() {
+        if p.protocol_type != PROTO_MORPHO {
+            continue;
+        }
+        let est = match estimators.get(i) {
+            Some(e) if e.len() == 42 && e.as_str() != "0x0000000000000000000000000000000000000000" => e,
+            _ => {
+                log_info!("Morpho[{}] no estimator provided; using dilution fallback", i);
+                continue;
+            }
+        };
+        match vault_reader::get_estimator_apy_wad(&rpc_config, est, chain_id) {
+            Ok(apy) if !apy.is_zero() => {
+                log_info!("Morpho[{}] base APY from estimator {} = {} wad", i, est, apy);
+                p.current_apy_wad = apy;
+            }
+            Ok(_) => { log_info!("Morpho[{}] estimator {} returned 0; using dilution fallback", i, est); }
+            Err(e) => { log_info!("Morpho[{}] estimator {} call failed ({}); using dilution fallback", i, est, e); }
+        }
+    }
 
     let (optimizer_input, irm_params) = transform_snapshot_to_input(snapshot);
     log_info!("Transformed {} protocols with IRM params", optimizer_input.protocols.len());
