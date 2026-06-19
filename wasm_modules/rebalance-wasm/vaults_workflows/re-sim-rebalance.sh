@@ -21,7 +21,8 @@ POD=$(kubectl get pods -n "$NS" -o name 2>/dev/null | grep -E '^pod/simulator-[a
 echo "ctx: $(kubectl config current-context)"
 echo "pod: $POD"
 echo "simulating (read-only)…"
-kubectl exec -i "$POD" -n "$NS" -- sh -c 'cd /app && node -' <<'JS' | grep -vE '^\{"level"' || true
+tmp="$(mktemp)"; rc=0
+kubectl exec -i "$POD" -n "$NS" -- sh -c 'cd /app && node -' > "$tmp" 2>&1 <<'JS' || rc=$?
 const { Database } = require('/app/dist/db.js');
 const { getWorkflowSDKService } = require('/app/dist/integrations/workflowSDK.js');
 const CID = 'Qmd3kt47g3hD5BmSNDN2Mzkn7PoYf9sYFSrzvHQbTf79h1'; // LIVE rebalance workflow (registered 2026-06-17, estimators[] payload, fixed WASM)
@@ -74,3 +75,8 @@ function errText(e) {
   process.exit(0);
 })().catch(e => { console.error('FATAL:', e && (e.stack || e.message)); process.exit(1); });
 JS
+# Log filtering is display-only (grep returning 1 on a fully-filtered file is harmless);
+# it must NOT mask the harness exit status captured in $rc above.
+grep -vE '^\{"level"' "$tmp" || true
+rm -f "$tmp"
+[ "$rc" -eq 0 ] || { echo "ABORT: re-sim harness failed (kubectl/node exit $rc) — see output above"; exit "$rc"; }
